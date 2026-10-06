@@ -210,33 +210,37 @@ jobs:
       - name: Configure
         shell: bash
         run: |
-          set -o pipefail
+          set -uo pipefail
           # 全过程留痕到 configure.log：Actions 日志在本仓库不可读（token 无 Actions 读取权限），
           # 但 artifact 可以下载，因此失败原因必须落到文件里。
-          configure() {
-            # 必须在函数内显式开启：函数被放进 if 条件上下文时，外层 bash -e 会被关掉，
-            # 否则 make defconfig 失败会被后面的 grep 成功掩盖（第一版就踩了这个坑）。
-            set -e
-            echo '### set-build-version'
-            cp '${{ inputs.config_seed }}' .config
-            BUILD_DATE='${{ steps.version.outputs.date }}' \
-            BUILD_ID='${{ steps.version.outputs.build_id }}' \
-            REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
-            UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
-            VERSION_CODE='${{ steps.version.outputs.version_code }}' \
-            bash scripts/set-build-version.sh .config
-            echo '### make defconfig'
-            make defconfig
-            echo '### gemtek profile isolation'
-            bash scripts/check-gemtek-profile-isolation.sh --config .config
-            echo '### version symbols'
-            grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
+          #
+          # bash 坑（踩过两次）：把这几步包成函数再放进 `if configure; then` 里，函数体内的
+          # set -e 同样失效（手册原话：即使设置了 -e 也不生效），于是 make defconfig 的失败会被
+          # 后面 grep 的成功掩盖。这里改用 `step && step && step` 链 + rc=$? 显式判定，不用函数+if。
+          run_step() {
+            echo "### $1"
+            shift
+            "$@"
           }
-          if configure 2>&1 | tee configure.log; then
-            tail -25 configure.log
+          {
+            run_step 'cp seed' cp '${{ inputs.config_seed }}' .config &&
+            run_step 'set-build-version' env \
+              BUILD_DATE='${{ steps.version.outputs.date }}' \
+              BUILD_ID='${{ steps.version.outputs.build_id }}' \
+              REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
+              UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
+              VERSION_CODE='${{ steps.version.outputs.version_code }}' \
+              bash scripts/set-build-version.sh .config &&
+            run_step 'make defconfig' make defconfig &&
+            run_step 'gemtek profile isolation' bash scripts/check-gemtek-profile-isolation.sh --config .config &&
+            run_step 'version symbols' grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
+          } > configure.log 2>&1
+          rc=$?
+          tail -30 configure.log
+          if [ "$rc" -eq 0 ]; then
             exit 0
           fi
-          echo '=== 配置阶段失败：configure.log 末尾 100 行 ==='
+          echo '=== 配置阶段失败（rc='"$rc"'）：configure.log 末尾 100 行 ==='
           tail -100 configure.log || true
           echo ''
           echo '=== 对照实验：用 fork 初始种子（未经本仓库裁剪）重跑 defconfig ==='

@@ -1,4 +1,11 @@
-src-git packages https://github.com/immortalwrt/packages.git
+# packages feed 锁到 2026-09-23（本仓库历史上最后一次构建成功的那一天）：
+# 上游在那之后引入 Kconfig 递归依赖（例如 2026-09-29 的
+# "treewide: depend on audio-support for the audio group"，涉及 sound/mpd），
+# 会让 `make defconfig` 直接报 recursive dependency 并中断；中断之后
+# airoha-an7581-mt7996-board 的 =m → =y 归一化不会发生，紧接着
+# scripts/check-gemtek-profile-isolation.sh 就报 "missing required package"。
+# 上游修好后把 ^<commit> 去掉即可恢复跟随 master。
+src-git packages https://github.com/immortalwrt/packages.git^10f1f42ef46f7a8e81394ca0066ebf9806faff1d
 src-git luci https://github.com/immortalwrt/luci.git
 src-git --directory=luci-theme-glass glass https://github.com/rchen14b/luci-theme-glass.git;main
 src-git routing https://github.com/openwrt/routing.git
