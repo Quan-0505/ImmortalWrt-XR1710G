@@ -82,6 +82,109 @@ jobs:
       - name: Apply feed patches
         run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
 
+      - name: Prepare kixdns and daed packages
+        run: |
+          set -e
+          # kixdns（Rust DNS 分流/转发核心）+ LuCI 应用 + 统计核心：来自 JohnsonRan/luci-app-kixdns v1.6.0
+          rm -rf /tmp/luci-app-kixdns
+          git clone -q --depth 1 -b v1.6.0 https://github.com/JohnsonRan/luci-app-kixdns /tmp/luci-app-kixdns
+          mkdir -p package/new
+          for p in kixdns luci-app-kixdns kixdns-stats; do
+            rm -rf "package/new/$p"
+            cp -rf "/tmp/luci-app-kixdns/$p" "package/new/$p"
+          done
+          # daed（DaedNext Rust 内核）：整包替换上游 Go 版，载荷由下一步解包到 prebuilt-data/
+          rm -rf package/new/daed
+          cp -rf PATCH/daed-pkg/daed package/new/daed
+          ls -la package/new/
+          python3 - <<'PYEOF'
+          import glob, sys
+          # daed 的内核前提：BTF + BPF + veth + clsact/tc。只写种子里的 CONFIG_KERNEL_* 在部分
+          # target 上到不了内核 .config，因此直接改 target 内核片段：先删同键旧行，再追加期望值。
+          OPS = """
+          CONFIG_DEBUG_INFO=y
+          CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+          CONFIG_DEBUG_INFO_BTF=y
+          CONFIG_BPF=y
+          CONFIG_BPF_SYSCALL=y
+          CONFIG_BPF_JIT=y
+          CONFIG_BPF_JIT_ALWAYS_ON=y
+          CONFIG_VETH=y
+          CONFIG_NET_SCH_INGRESS=y
+          CONFIG_NET_CLS_ACT=y
+          CONFIG_NET_CLS_BPF=y
+          """.strip().splitlines()
+          frags = sorted(glob.glob('target/linux/airoha/config-6.*')) or sorted(glob.glob('target/linux/airoha/config-*'))
+          if not frags:
+              sys.exit('no airoha kernel config fragment under target/linux/airoha/')
+          keys = {ln.split('=')[0] for ln in OPS}
+          for f in frags:
+              orig = open(f, encoding='utf-8').read().splitlines()
+              kept = [ln for ln in orig if ln.split('=')[0] not in keys]
+              open(f, 'w', encoding='utf-8').write('\n'.join(kept + OPS) + '\n')
+              print('kernel dae opts -> %s (%d -> %d lines)' % (f, len(orig), len(kept) + len(OPS)))
+          PYEOF
+
+      - name: Fetch plugin prebuilt payloads (kixdns + daed)
+        run: |
+          set -e
+          curl -sSL --retry 4 --retry-all-errors -o /tmp/kix.tgz \
+            "https://github.com/JohnsonRan/luci-app-kixdns/releases/download/v1.6.0/kixdns_aarch64_cortex-a53-openwrt-24.10.tar.gz"
+          rm -rf /tmp/kix && mkdir -p /tmp/kix && tar -xzf /tmp/kix.tgz -C /tmp/kix
+          python3 - <<'PYEOF'
+          import glob, gzip, io, os, tarfile
+          # kixdns / kixdns-stats 的预编译 musl 静态二进制：从发布 ipk 里取出放进
+          # package/new/<pkg>/prebuilt/，Makefile 见到就不再拉 Go 工具链。
+          JOBS = [
+              ('/tmp/kix/kixdns_*.ipk', './usr/bin/kixdns', 'kixdns', 'kixdns'),
+              ('/tmp/kix/kixdns-stats_*.ipk', './usr/libexec/kixdns-stats-core', 'kixdns-stats', 'kixdns-stats-core'),
+          ]
+          for pattern, member, pkg, fname in JOBS:
+              hits = glob.glob(pattern)
+              if not hits:
+                  raise SystemExit('missing %s in the release tarball' % pattern)
+              outer = tarfile.open(fileobj=io.BytesIO(gzip.decompress(open(hits[0], 'rb').read())), mode='r:')
+              data = outer.extractfile('./data.tar.gz').read()
+              tf = tarfile.open(fileobj=io.BytesIO(gzip.decompress(data)), mode='r:')
+              blob = tf.extractfile(member).read()
+              dst = os.path.join('package', 'new', pkg, 'prebuilt')
+              os.makedirs(dst, exist_ok=True)
+              path = os.path.join(dst, fname)
+              open(path, 'wb').write(blob)
+              os.chmod(path, 0o755)
+              print('%-46s -> %s (%d bytes)' % (member, path, len(blob)))
+          PYEOF
+          python3 - <<'PYEOF'
+          import gzip, io, os, shutil, tarfile, urllib.request
+          # daed：Quan-0505/rust-daed v3.1.3 的 aarch64 载荷。usr/bin/daed 是静态 AArch64
+          # （无解释器），与 AN7581 的 Cortex-A53 同核的 r2s 资产最贴近。
+          url = 'https://github.com/Quan-0505/rust-daed/releases/download/v3.1.3/rust-daed-r2s.apk'
+          print('fetching', url)
+          with urllib.request.urlopen(url, timeout=600) as resp:
+              raw = resp.read()
+          if raw[:2] != b'\x1f\x8b':
+              raise SystemExit('unexpected payload magic %s (want gzip/apk v2)' % raw[:4].hex())
+          tf = tarfile.open(fileobj=io.BytesIO(gzip.decompress(raw)), mode='r:')
+          dst = os.path.join('package', 'new', 'daed', 'prebuilt-data')
+          shutil.rmtree(dst, ignore_errors=True)
+          for m in tf.getmembers():
+              if m.name.startswith('usr/') or m.name.startswith('etc/'):
+                  p = os.path.join(dst, m.name)
+                  if m.isdir():
+                      os.makedirs(p, exist_ok=True)
+                  elif m.isfile():
+                      os.makedirs(os.path.dirname(p), exist_ok=True)
+                      with open(p, 'wb') as f:
+                          f.write(tf.extractfile(m).read())
+          web_dst = os.path.join(dst, 'usr', 'share', 'daed', 'web')
+          shutil.copytree(os.path.join('PATCH', 'daed-web'), web_dst, dirs_exist_ok=True)
+          if not os.path.isfile(os.path.join(dst, 'etc', 'init.d', 'daed')):
+              raise SystemExit('daed payload is missing etc/init.d/daed')
+          print('payload daed: %d bytes' % os.path.getsize(os.path.join(dst, 'usr', 'bin', 'daed')))
+          print('payload files: %d (web %d)' % (sum(len(fs) for _, _, fs in os.walk(dst)),
+                                                sum(len(fs) for _, _, fs in os.walk(web_dst))))
+          PYEOF
+
       - name: Configure
         run: |
           cp '${{ inputs.config_seed }}' .config
@@ -134,6 +237,33 @@ jobs:
             --config .config \
             --kernel-config "$kernel_config" \
             --manifest "$manifest"
+
+      - name: Verify plugin integration (kixdns + daed)
+        shell: bash
+        run: |
+          set -e
+          echo '=== .config 插件开关 ==='
+          for p in daed kixdns kixdns-stats luci-app-kixdns ip-full; do
+            grep -Fqx "CONFIG_PACKAGE_${p}=y" .config || { echo "missing CONFIG_PACKAGE_${p}=y" >&2; exit 1; }
+          done
+          grep -E '^CONFIG_PACKAGE_(daed|kixdns|kixdns-stats|luci-app-kixdns|ip-full)=y$' .config
+          echo '=== 内核 BTF/BPF/veth/clsact（daed 运行前提）==='
+          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 -path '*/linux-*/.config' -print -quit)
+          test -n "$kernel_config"
+          for sym in CONFIG_DEBUG_INFO_BTF CONFIG_BPF_SYSCALL CONFIG_VETH CONFIG_NET_CLS_ACT CONFIG_NET_CLS_BPF CONFIG_NET_SCH_INGRESS; do
+            grep -Eq "^${sym}=y$" "$kernel_config" || { echo "kernel is missing ${sym}=y" >&2; exit 1; }
+            grep -E "^${sym}=y$" "$kernel_config"
+          done
+          echo '=== 构建产物里的插件包 ==='
+          find bin -name 'daed-*.apk' -o -name 'kixdns-*.apk' -o -name 'kixdns-stats-*.apk' -o -name 'luci-app-kixdns-*.apk' | sort
+          for pat in 'daed-*.apk' 'kixdns-*.apk' 'kixdns-stats-*.apk' 'luci-app-kixdns-*.apk'; do
+            n=$(find bin -name "$pat" | wc -l)
+            echo "$pat -> $n"
+            [ "$n" -ge 1 ] || { echo "no built package matching $pat" >&2; exit 1; }
+          done
+          echo '=== 载荷与镜像 ==='
+          ls -lh package/new/daed/prebuilt-data/usr/bin/daed package/new/kixdns/prebuilt/kixdns package/new/kixdns-stats/prebuilt/kixdns-stats-core
+          ls -lh bin/targets/airoha/an7581/*.itb
 
       - name: Check build status
         if: always()
