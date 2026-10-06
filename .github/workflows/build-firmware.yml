@@ -192,17 +192,43 @@ jobs:
           PYEOF
 
       - name: Configure
+        shell: bash
         run: |
-          cp '${{ inputs.config_seed }}' .config
-          BUILD_DATE='${{ steps.version.outputs.date }}' \
-          BUILD_ID='${{ steps.version.outputs.build_id }}' \
-          REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
-          UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
-          VERSION_CODE='${{ steps.version.outputs.version_code }}' \
-          bash scripts/set-build-version.sh .config
-          make defconfig
-          bash scripts/check-gemtek-profile-isolation.sh --config .config
-          grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
+          set -o pipefail
+          # 全过程留痕到 configure.log：Actions 日志在本仓库不可读（token 无 Actions 读取权限），
+          # 但 artifact 可以下载，因此失败原因必须落到文件里。
+          configure() {
+            cp '${{ inputs.config_seed }}' .config
+            BUILD_DATE='${{ steps.version.outputs.date }}' \
+            BUILD_ID='${{ steps.version.outputs.build_id }}' \
+            REPO_COMMIT='${{ steps.version.outputs.repo_commit }}' \
+            UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
+            VERSION_CODE='${{ steps.version.outputs.version_code }}' \
+            bash scripts/set-build-version.sh .config
+            make defconfig
+            bash scripts/check-gemtek-profile-isolation.sh --config .config
+            grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
+          }
+          if configure 2>&1 | tee configure.log; then
+            tail -25 configure.log
+            exit 0
+          fi
+          echo '=== 配置阶段失败：configure.log 末尾 100 行 ==='
+          tail -100 configure.log || true
+          echo ''
+          echo '=== 对照实验：用 fork 初始种子（未经本仓库裁剪）重跑 defconfig ==='
+          if git fetch --depth 1 origin 401e088 >/dev/null 2>&1 && git show FETCH_HEAD:1710.config > /tmp/orig.config; then
+            cp /tmp/orig.config .config
+            if make defconfig > defconfig-control.log 2>&1; then
+              echo 'CONTROL=原始种子 defconfig 成功 → 失败很可能由本仓库的配置改动引起'
+            else
+              echo 'CONTROL=原始种子 defconfig 也失败 → 与配置改动无关（源码树/上游或环境问题）'
+              tail -40 defconfig-control.log || true
+            fi
+          else
+            echo 'CONTROL=无法取得原始种子，跳过对照'
+          fi
+          exit 1
 
       - name: Download sources
         run: make download -j$(nproc)
@@ -294,6 +320,9 @@ jobs:
           path: |
             build.log
             build-verbose.log
+            configure.log
+            defconfig-control.log
+            .config
             bin/targets/airoha/an7581/*.itb
             bin/targets/airoha/an7581/*manifest
             bin/targets/airoha/an7581/config.buildinfo
