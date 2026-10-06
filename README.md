@@ -185,6 +185,24 @@ Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所
 
 ---
 
+### 2026-10-06：镜像阶段（FIT）找不到 DTB
+
+`Configure` 与内核编译都正常，但 `target/linux install` 组镜像时失败：
+
+```
+FATAL ERROR: Couldn't open ".../build_dir/.../linux-airoha_an7581/image--xr1710g-ubi.dtb": No such file or directory
+make[4]: *** [Makefile:33: ...-squashfs-sysupgrade.itb] Error 1
+```
+
+- DTB 实际编译成 `$(KDIR)/image-an7581-gemtek-xr1710g-ubi.dtb`（设备块的 `DEVICE_DTS` 生效）；
+- 组 FIT 时 `mkits.sh -d` 拿到的却是 `$(KDIR)/image--xr1710g-ubi.dtb`，正是 `Device/Default` 里
+  `$(SOC)-$(lastword $(subst _, ,$(1)))` 在 `SOC` 为空时的结果；
+- 2026-09-23 那次能过属于巧合：当时 ubi 设备的 `DEVICE_DTS`（`an7581-xr1710g-ubi`）恰好等于该公式
+  的结果。作者后来把 DTS 改名为 `an7581-gemtek-xr1710g-ubi`，两者不再相等，问题才暴露。
+
+修法：两台设备的 `IMAGE/sysupgrade.itb` 与 `KERNEL_INITRAMFS` 直接写**字面** DTB 路径（不经过变量
+查找，作用域问题无从发生），见 [target/linux/airoha/image/an7581.mk](target/linux/airoha/image/an7581.mk)。
+
 <a id="build"></a>
 ## 🔧 自行编译
 

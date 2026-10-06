@@ -244,6 +244,11 @@ define Device/gemtek_xr1710g
   DEVICE_ALT0_MODEL := XR1710G
   SUPPORTED_DEVICES := gemtek,xr1710g
   DEVICE_DTS := an7581-xr1710g
+  # FIT 阶段用的 DTB 路径写成字面量：镜像配方展开时 DEVICE_DTS 会退回
+  # Device/Default 的 $$(SOC)-$$(lastword ...)（SOC 为空 → "-xr1710g-ubi"），
+  # mkits.sh 因此找不到已编译好的 DTB。字面量不经过变量查找，绕开该作用域问题。
+  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-an7581-xr1710g.dtb external-static-with-rootfs | append-metadata
+  KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-an7581-xr1710g.dtb with-initrd | pad-to 128k
 endef
 TARGET_DEVICES += gemtek_xr1710g
 
@@ -254,6 +259,11 @@ define Device/gemtek_xr1710g-ubi
   DEVICE_ALT0_MODEL := XR1710G (OpenWrt U-Boot UBI layout)
   SUPPORTED_DEVICES := gemtek,xr1710g-ubi
   DEVICE_DTS := an7581-gemtek-xr1710g-ubi
+  # FIT 阶段用的 DTB 路径写成字面量：镜像配方展开时 DEVICE_DTS 会退回
+  # Device/Default 的 $$(SOC)-$$(lastword ...)（SOC 为空 → "-xr1710g-ubi"），
+  # mkits.sh 因此找不到已编译好的 DTB。字面量不经过变量查找，绕开该作用域问题。
+  IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-an7581-gemtek-xr1710g-ubi.dtb external-static-with-rootfs | append-metadata
+  KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-an7581-gemtek-xr1710g-ubi.dtb with-initrd | pad-to 128k
   DEVICE_COMPAT_VERSION := 2.0
   DEVICE_COMPAT_MESSAGE := Firmware requires the XR1710G OpenWrt U-Boot UBI layout \
        with bl2 at 0x00000000 and the UBI partition extending from \
