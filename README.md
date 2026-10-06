@@ -1,37 +1,41 @@
-<img src="https://avatars.githubusercontent.com/u/53193414?s=200&v=4" alt="logo" width="180" height="180" align="right">
+<div align="center">
 
-# ImmortalWrt-XR1710G（个人定制版）
+# ImmortalWrt for Gemtek / Brightspeed XR1710G
 
-[![Build](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/build-firmware.yml?branch=master&label=Build)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/build-firmware.yml)
-[![Sync](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/sync-upstream.yml?branch=master&label=Sync)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/sync-upstream.yml)
-[![Upstream](https://img.shields.io/badge/upstream-naoki66%2FImmortalWrt--for--Gemtek--brightspeed-blue)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)
-[![Kernel](https://img.shields.io/badge/kernel-6.18-orange)](target/linux/airoha/patches-6.18)
+**ImmortalWrt 25.12 定制固件 · KixDNS + DaedNext · footstrap 默认主题 · GitHub Actions 构建**
+
+[![Build](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/build-firmware.yml?branch=master&label=Build&style=flat-square)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/build-firmware.yml)
+[![Sync](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/sync-upstream.yml?branch=master&label=Sync&style=flat-square)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/sync-upstream.yml)
+[![Upstream](https://img.shields.io/badge/upstream-naoki66%2FImmortalWrt--for--Gemtek--brightspeed-blue?style=flat-square)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)
+[![Target](https://img.shields.io/badge/target-airoha%2Fan7581-0b5?style=flat-square)](target/linux/airoha/an7581)
+[![Kernel](https://img.shields.io/badge/kernel-6.18-orange?style=flat-square)](target/linux/airoha/patches-6.18)
+[![License](https://img.shields.io/badge/license-GPL--2.0--only-blue?style=flat-square)](https://spdx.org/licenses/GPL-2.0-only.html)
+[![Downloads](https://img.shields.io/github/downloads/Quan-0505/ImmortalWrt-XR1710G/total?style=flat-square&label=downloads)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)
+
+**只维护 XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND）· 基于
+[naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed) 定制
+
+[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [🧩 预装插件](#-预装插件) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译) · [🐞 构建诊断](#-构建期诊断为什么从-2026-09-24-起一直卡在-configure)
+
+</div>
+
+---
+
 
 只针对 **Gemtek / Brightspeed XR1710G**（Airoha AN7581GT）的 ImmortalWrt 固件。设备树、内核与无线补丁、
 分区/刷写方案全部继承自 [naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)，
 本仓库在原仓库基础上只做三件事：
-
 1. **只预装两个插件**：`kixdns`（含统计）与 `rust-daed`（DaedNext）；
 2. **默认管理地址改为 `192.168.2.1`**（与原仓库的 `192.168.50.1` 不同）；
 3. **补齐 daed 需要的 eBPF 内核前提**（BTF / BPF / veth / clsact），并裁掉一批用不到的第三方插件。
-
 > 本仓库只维护 XR1710G（一次构建出「原版 U-Boot 分区」和「OpenWrt U-Boot UBI 布局」两套镜像）。
 > 原仓库里的 XG2010G / PON 支持仍然存在于源码树中（`2010.config` 等），但本仓库不构建、不验证。
 
-## 目录
+---
 
-- [一、与原仓库的差异](#一与原仓库的差异)
-- [二、预装插件](#二预装插件)
-- [三、快速开始](#三快速开始)
-- [四、构建期诊断：Configure 卡在哪、怎么定位](#四构建期诊断configure-卡在哪怎么定位)
-- [五、构建](#五构建)
-- [六、设备与硬件](#六设备与硬件)
-- [七、固件特性与默认行为](#七固件特性与默认行为)
-- [八、主要软件包](#八主要软件包)
-- [九、仓库结构](#九仓库结构)
-- [十、致谢与许可证](#十致谢与许可证)
+<a id="diff"></a>
+## 🔀 与原仓库的差异
 
-## 一、与原仓库的差异
 
 | 项目 | 原仓库 | 本仓库 |
 |------|--------|--------|
@@ -48,7 +52,11 @@
 `luci-app-airoha-recovery`、`luci-app-mesh-conf`、`luci-app-netmode`、`luci-app-upnp`、`luci-app-firewall`、
 `luci-app-arpbind`、`luci-app-mlo`、`luci-app-package-manager`、`luci-app-autoreboot`）全部保留。
 
-## 二、预装插件
+---
+
+<a id="plugins"></a>
+## 🧩 预装插件
+
 
 ### kixdns
 
@@ -82,7 +90,21 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 | 默认主题 | 首次开机即 footstrap：`target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh` 把 `luci.main.mediaurlbase` 写成 `/luci-static/footstrap`（编号 91 保证排在主题包自带默认值之后） |
 | 手动切换 | LuCI → 系统 → 系统 → 语言和界面 → 设计；也可 `uci set luci.main.mediaurlbase='/luci-static/footstrap' && uci commit luci` |
 
-## 三、快速开始
+---
+
+<a id="downloads"></a>
+## 📦 固件下载
+
+最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后会附上
+`*.itb` 镜像与 `config.buildinfo` / `feeds.buildinfo` / `version.buildinfo` / `sha256sums`。
+`1710.config` 一次出两套镜像（原厂 U-Boot 与 OpenWrt U-Boot UBI），**两者不能互刷**，刷写细节见
+[🚀 快速开始](#-快速开始)。
+
+---
+
+<a id="quick-start"></a>
+## 🚀 快速开始
+
 
 ### 登录
 
@@ -109,7 +131,11 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 > LuCI 的「保留配置」不会保留额外安装的软件包。升级前请备份配置并记录已装软件包；升级后需重新安装
 > OpenClash、PassWall、AdGuard Home 等**非预装**组件，且必须使用与新固件同源的软件包，不要恢复旧固件的 `kmod-*`。
 
-## 四、构建期诊断：为什么从 2026-09-24 起一直卡在 Configure
+---
+
+<a id="diagnostics"></a>
+## 🐞 构建期诊断：为什么从 2026-09-24 起一直卡在 Configure
+
 
 Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所以 `Apply feed patches` 与
 `Configure` 两步都会把输出 tee 到文件（`feed-patches.log` / `configure.log`），失败时随
@@ -147,7 +173,11 @@ Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所
   失败会被后面的 `grep` 成功掩盖 —— 第一版就是这样做出了假绿灯。现在改成
   `step && step` 链 + `rc=$?` 显式判定，并用 `### 步骤名` 标出失败位置。
 
-## 五、构建
+---
+
+<a id="build"></a>
+## 🔧 自行编译
+
 
 ### GitHub Actions（推荐）
 
@@ -192,7 +222,11 @@ bash scripts/summarize-build-errors.sh build.log
 本地构建后请确认内核 `.config` 与产物中确实包含 BTF 与两个插件（可直接复用 CI 的
 `Verify plugin integration` 步骤作为检查脚本）。
 
-## 六、设备与硬件
+---
+
+<a id="hardware"></a>
+## 📡 设备与硬件
+
 
 默认管理地址 **http://192.168.2.1** 或 **http://immortalwrt.lan**，用户名 `root`，密码*无*。
 
@@ -225,7 +259,11 @@ bash scripts/summarize-build-errors.sh build.log
   `0x5000`、长度 `0x1e00`。**不要**恢复旧布局那种「EEPROM 放在卷首、原始 MAC 放在 `0x5000/0x6000`」的重排镜像。
 - `luci-app-airoha-factory` 会按板型选择旧布局 raw MAC 写入或 DSD 布局整卷读改写；UBI `factory` 卷回写需要 `ubiupdatevol`。
 
-## 七、固件特性与默认行为
+---
+
+<a id="defaults"></a>
+## ⚙️ 固件特性与默认行为
+
 
 ### 关键补丁（完整列表见 [patches-6.18](target/linux/airoha/patches-6.18) 与 [generic/pending-6.18](target/linux/generic/pending-6.18)）
 
@@ -252,7 +290,11 @@ bash scripts/summarize-build-errors.sh build.log
 - IPv6 使用 SLAAC/EUI-64，关闭 DHCPv6/NDP 与 RA DNS/附加标志，减少国内网络环境下的兼容问题。
 - 默认开启软件/硬件 flow offload；NPU 与 Wi-Fi 流绑定补丁已包含在内。
 
-## 八、主要软件包
+---
+
+<a id="packages"></a>
+## 📦 主要软件包
+
 
 **内核模块**：`kmod-mt7996-firmware`、`kmod-mt7996e`、`airoha-en7581-mt7996-npu-firmware`、
 `kmod-crypto-hw-eip93`、`kmod-nft-offload`、`kmod-br-netfilter`、`kmod-tcp-bbr`、`kmod-wireguard`、
@@ -269,7 +311,11 @@ bash scripts/summarize-build-errors.sh build.log
 **已从原仓库裁剪**：`lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、
 `rtp2httpd`、`wechatpush`、`timewol`（含各自的 LuCI 应用与中文语言包）。
 
-## 九、仓库结构
+---
+
+<a id="structure"></a>
+## 📂 仓库结构
+
 
 ```
 .github/workflows/     build-firmware.yml（构建+发布）、sync-upstream.yml（跟随上游）
@@ -292,7 +338,11 @@ target/linux/airoha/   设备树、内核与无线补丁、子目标内核片段
 Release 约定：Tag 形如 `YYYYMMDD-<short-hash>`，名称含构建日期与短 hash；构建时会通过
 [scripts/set-build-version.sh](scripts/set-build-version.sh) 写入 LuCI 可见的构建日期与 commit。
 
-## 十、致谢与许可证
+---
+
+<a id="credits"></a>
+## 🤝 致谢与许可
+
 
 **设备支持与补丁全部来自上游项目**，本仓库只做插件装配与配置裁剪：
 
