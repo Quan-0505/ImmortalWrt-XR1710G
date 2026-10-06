@@ -98,9 +98,12 @@ jobs:
           cp -rf PATCH/daed-pkg/daed package/new/daed
           ls -la package/new/
           python3 - <<'PYEOF'
-          import glob, sys
+          import glob
           # daed 的内核前提：BTF + BPF + veth + clsact/tc。只写种子里的 CONFIG_KERNEL_* 在部分
           # target 上到不了内核 .config，因此直接改 target 内核片段：先删同键旧行，再追加期望值。
+          # 注意：airoha 的内核片段在**子目标**下（target/linux/airoha/an7581/config-6.18），
+          # 不在 target/linux/airoha/config-6.*；找不到片段不算失败（种子仍有 CONFIG_KERNEL_*，
+          # 且构建后的 Verify plugin integration 会核对内核 .config 里 BTF 是否真的生效）。
           OPS = """
           CONFIG_DEBUG_INFO=y
           CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
@@ -114,9 +117,12 @@ jobs:
           CONFIG_NET_CLS_ACT=y
           CONFIG_NET_CLS_BPF=y
           """.strip().splitlines()
-          frags = sorted(glob.glob('target/linux/airoha/config-6.*')) or sorted(glob.glob('target/linux/airoha/config-*'))
+          frags = (sorted(glob.glob('target/linux/airoha/*/config-6.*'))
+                   or sorted(glob.glob('target/linux/airoha/config-6.*'))
+                   or sorted(glob.glob('target/linux/airoha/**/config-*', recursive=True)))
           if not frags:
-              sys.exit('no airoha kernel config fragment under target/linux/airoha/')
+              print('WARNING: target/linux/airoha 下没有内核片段，改由种子 CONFIG_KERNEL_* 生效；'
+                    '构建后的 Verify plugin integration 会核对内核 .config')
           keys = {ln.split('=')[0] for ln in OPS}
           for f in frags:
               orig = open(f, encoding='utf-8').read().splitlines()
