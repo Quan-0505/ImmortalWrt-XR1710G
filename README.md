@@ -109,30 +109,43 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 > LuCI 的「保留配置」不会保留额外安装的软件包。升级前请备份配置并记录已装软件包；升级后需重新安装
 > OpenClash、PassWall、AdGuard Home 等**非预装**组件，且必须使用与新固件同源的软件包，不要恢复旧固件的 `kmod-*`。
 
-## 四、构建期诊断：Configure 卡在哪、怎么定位
+## 四、构建期诊断：为什么从 2026-09-24 起一直卡在 Configure
 
 Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所以 `Apply feed patches` 与
 `Configure` 两步都会把输出 tee 到文件（`feed-patches.log` / `configure.log`），失败时随
 `gemtek-configure-diagnostics` artifact 上传 —— 任何失败都能在几分钟内看到原文，不必猜。
 
-2026-10-06 的诊断结论：
+证据链（run#6 的 `configure.log` + 三份种子对比）：
 
-1. `scripts/check-gemtek-profile-isolation.sh` 报
-   `xr1710g config is missing required package: airoha-an7581-mt7996-board`。该包在源码树里
-   确实存在（`package/network/config/airoha-an7581-mt7996-board`），种子里写的是 `=m`
-   （与参考仓库完全一致），正常应由 defconfig 归一成 `=y`；现在本仓库直接写成显式 `=y`，
-   不再依赖这一步归一化。
-2. 同一份日志里还有两条上游 feed 的 Kconfig 递归依赖告警（`PACKAGE_mpd-full` 自依赖、
-   `squeezelite-custom` 与 `SQUEEZELITE_WMA_ALAC` 互相依赖）。注意 `sound/squeezelite`
-   的最后一次改动是 2026-08-11 —— 说明这类告警在 2026-09-23 的成功构建里同样存在，
-   **并非致命错误**，不要为它去改 feed 或回退 feed。
-3. 曾试着把 `packages` feed 锁到 2026-09-23 来规避，结果 `Apply feed patches` 立刻失败：
-   `patches/feeds/**` 是按当前 feed 上下文写的，`git apply` 在旧 feed 上找不到上下文
-   （`Feed patch does not apply cleanly`）。**结论：feed 不锁版本**，补丁与 feed 必须同步演进。
+1. **`make defconfig` 是成功的**：日志里 `### make defconfig` 之后走到了
+   `### gemtek profile isolation`，说明链条没有停在 defconfig。日志里那些
+   `recursive dependency detected`（`PACKAGE_mpd-full` 自依赖、`squeezelite-custom` 与
+   `SQUEEZELITE_WMA_ALAC` 互相依赖）**只是告警**：`sound/squeezelite` 最后一次改动是
+   2026-08-11，2026-09-23 的成功构建同样带着它。
+2. 真正失败的是 `scripts/check-gemtek-profile-isolation.sh`：
+   `xr1710g config is missing required package: airoha-an7581-mt7996-board`。该包是
+   `HIDDEN:=1`，它的值由设备定义 `target/linux/airoha/image/an7581.mk` 中
+   `Device/gemtek_xr1710g-common` 的 `DEVICE_PACKAGES` 推导，**种子里的显式值会被 defconfig 覆盖**。
+3. 所以关键在设备符号。2026-09-23 的绿灯种子用的是主符号
+   `CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`
+   （`CONFIG_TARGET_PROFILE="DEVICE_gemtek_xr1710g-ubi"`）；从 2026-09-27 那份种子开始，
+   主符号变成 `is not set`，只剩派生形式
+   `CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_gemtek_xr1710g=y` —— 于是
+   `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。参考仓库 run#62/#63 与本仓库
+   前几轮卡的都是这一条（`TARGET_PROFILE` 也从 `-ubi` 变成了非 ubi 那台）。
 
-另外修掉一个 CI 自身的坑：把配置步骤包成函数再放进 `if` 条件上下文时，bash 连函数体内的
-`set -e` 也不生效（手册明文），失败会被后面的 `grep` 成功掩盖 —— 第一版就是这样出现假绿灯的。
-现在改成 `step && step` 链 + `rc=$?` 显式判定，并用 `### 步骤名` 标出失败位置。
+修复：`1710.config` 用**主符号**把两台设备都选上（`gemtek_xr1710g` 与 `gemtek_xr1710g-ubi`
+各一行 `=y`，一次出两套镜像），`TARGET_PROFILE` 对齐绿灯种子，并额外显式写
+`CONFIG_PACKAGE_airoha-an7581-mt7996-board=y` 作为双保险。
+
+另外两条经验：
+
+- **feed 不要锁版本**。曾把 `packages` 锁到 2026-09-23 想绕过上游告警，`Apply feed patches`
+  立刻失败：`patches/feeds/**` 是按当前 feed 上下文写的，`git apply` 在旧 feed 上找不到上下文
+  （脚本对「feed 存在但补丁打不上」是 `exit 1`）。上游出问题就加 `patches/feeds/**` 补丁。
+- **不要在条件上下文里用函数包装会失败的步骤**：bash 连函数体内的 `set -e` 也不生效（手册明文），
+  失败会被后面的 `grep` 成功掩盖 —— 第一版就是这样做出了假绿灯。现在改成
+  `step && step` 链 + `rc=$?` 显式判定，并用 `### 步骤名` 标出失败位置。
 
 ## 五、构建
 
