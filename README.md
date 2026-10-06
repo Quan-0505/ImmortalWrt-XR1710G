@@ -28,7 +28,10 @@
 1. **只预装两个插件**：`kixdns`（含统计）与 `rust-daed`（DaedNext）；
 2. **默认管理地址改为 `192.168.2.1`**（与原仓库的 `192.168.50.1` 不同）；
 3. **补齐 daed 需要的 eBPF 内核前提**（BTF / BPF / veth / clsact），并裁掉一批用不到的第三方插件。
-> 本仓库只维护 XR1710G（一次构建出「原版 U-Boot 分区」和「OpenWrt U-Boot UBI 布局」两套镜像）。
+> 本仓库只维护 XR1710G。CI 实际构建的 profile 是 `DEVICE_gemtek_xr1710g-ubi`
+> （`config.buildinfo` 可证：`CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`），
+> 即 **OpenWrt U-Boot UBI 布局**那一套镜像；源码树里另有原厂 U-Boot 布局的设备定义
+> （`gemtek_xr1710g`），需要时把 profile 切过去自行构建。
 > 原仓库里的 XG2010G / PON 支持仍然存在于源码树中（`2010.config` 等），但本仓库不构建、不验证。
 
 ---
@@ -42,7 +45,7 @@
 | 预装插件 | `lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、`rtp2httpd`、`wechatpush`、`timewol` | **只留 `kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`**，上述第三方全部关闭 |
 | 默认管理地址 | `192.168.50.1` | **`192.168.2.1`**（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`） |
 | 内核配置 | `CONFIG_DEBUG_INFO=y` + `DEBUG_INFO_REDUCED=y` | 追加 `DEBUG_INFO_BTF`、`BPF`、`BPF_SYSCALL`、`BPF_JIT(_ALWAYS_ON)`、`VETH`、`NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`，并**关闭 `DEBUG_INFO_REDUCED`**（生成完整 BTF，daed 的 eBPF 依赖它） |
-| 设备范围 | XR1710G + XG2010G | **仅 XR1710G**（`1710.config` 一次出两套镜像） |
+| 设备范围 | XR1710G + XG2010G | **仅 XR1710G**（profile = `DEVICE_gemtek_xr1710g-ubi`，UBI 布局） |
 | 新增目录 | — | [`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/daed-web`](PATCH/daed-web)（daed WebUI 覆盖层）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)（主题中文翻译） |
 | LuCI 主题 | argon / bootstrap / glass | 追加 **footstrap 并设为默认开机主题**（`target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh`）；中文包按 luci feed 的实际命名 `luci-i18n-footstrap-zh-cn` 选择 |
 | feed 版本 | 全部跟随上游 master | 同样不锁版本（`patches/feeds/**` 与 feed 必须同步演进，见第四节） |
@@ -97,7 +100,8 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 
 最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后会附上
 `*.itb` 镜像与 `config.buildinfo` / `feeds.buildinfo` / `version.buildinfo` / `sha256sums`。
-`1710.config` 一次出两套镜像（原厂 U-Boot 与 OpenWrt U-Boot UBI），**两者不能互刷**，刷写细节见
+本仓库 CI 产出的是 **OpenWrt U-Boot UBI 布局**那一套（原厂 U-Boot 布局的设备定义在源码树里但未被
+profile 选中，两种布局**不能互刷**），刷写细节见
 [🚀 快速开始](#-快速开始)。
 
 ---
@@ -118,6 +122,11 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 - 固件文件（`.itb`）：
   - 原版 U-Boot 分区：`immortalwrt-*-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb`
   - OpenWrt U-Boot UBI 布局：`immortalwrt-*-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb`
+
+  > **本仓库 CI 目前只产出第二条（`-ubi`）**：种子里两个设备符号都写了，但 defconfig 的 choice 会
+  > 把单选收敛为一台（构建日志里的 `changes choice state` 警告即此），最终 `config.buildinfo` 里
+  > 只有 `CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`。要原厂 U-Boot 布局那套，
+  > 需自行把 profile 切到 `gemtek_xr1710g` 再构建。
 - 常规升级：LuCI → 系统 → 备份/升级 → 刷写固件（选择与当前布局**匹配**的那个文件）。
 
 > [!WARNING]
@@ -160,8 +169,9 @@ Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所
    `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。参考仓库 run#62/#63 与本仓库
    前几轮卡的都是这一条（`TARGET_PROFILE` 也从 `-ubi` 变成了非 ubi 那台）。
 
-修复：`1710.config` 用**主符号**把两台设备都选上（`gemtek_xr1710g` 与 `gemtek_xr1710g-ubi`
-各一行 `=y`，一次出两套镜像），`TARGET_PROFILE` 对齐绿灯种子，并额外显式写
+修复：`1710.config` 用**主符号**把两台设备都选上（`gemtek_xr1710g` 与 `gemtek_xr1710g-ubi` 各一行
+`=y`；实测 defconfig 会按 choice 折叠为 `-ubi` 一台，与参考仓库 09-23 成功那次的 profile 一致），
+`TARGET_PROFILE` 对齐绿灯种子，并额外显式写
 `CONFIG_PACKAGE_airoha-an7581-mt7996-board=y` 作为双保险。
 
 另外两条经验：
@@ -319,7 +329,7 @@ bash scripts/summarize-build-errors.sh build.log
 
 ```
 .github/workflows/     build-firmware.yml（构建+发布）、sync-upstream.yml（跟随上游）
-1710.config            仅 XR1710G：multi-profile，一次构建两套镜像
+1710.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g-ubi（UBI 布局）
 2010.config            上游遗留（XG2010G），本仓库不构建
 PATCH/daed-pkg/daed/   daed 包定义（版本、安装规则、prebuilt-data 装载）
 PATCH/daed-web/        daed WebUI 覆盖层（构建时覆盖到 usr/share/daed/web）
@@ -332,7 +342,7 @@ target/linux/airoha/   设备树、内核与无线补丁、子目标内核片段
 
 | 工作流 | 触发 | 功能 |
 |--------|------|------|
-| [build-firmware.yml](.github/workflows/build-firmware.yml) | 手动 | 装配插件 → 构建两套镜像 → 闸门校验 → 上传 Artifacts / 发布 Release |
+| [build-firmware.yml](.github/workflows/build-firmware.yml) | 手动 | 装配插件 → 构建（UBI 布局） → 闸门校验 → 上传 Artifacts / 发布 Release |
 | [sync-upstream.yml](.github/workflows/sync-upstream.yml) | 每 3 天 + 手动 | 同步 ImmortalWrt 上游 |
 
 Release 约定：Tag 形如 `YYYYMMDD-<short-hash>`，名称含构建日期与短 hash；构建时会通过

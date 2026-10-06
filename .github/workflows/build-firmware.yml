@@ -287,18 +287,50 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          failed_pkg=$(grep 'ERROR:.*failed to build' build.log | head -1 | sed 's/.*ERROR: \(.*\) failed to build.*/\1/' || true)
-          if [ -n "$failed_pkg" ]; then
-            echo "=== Rebuilding $failed_pkg with V=s ==="
-            make "package/$failed_pkg/compile" V=s -j1 2>&1 | tee build-verbose.log || true
-            echo "=== First errors in build-verbose.log ==="
-            grep -nE "error:|Error [0-9]|FAILED|Patch failed|No rule to make target" build-verbose.log | head -40 || true
-            echo "=== tail of build-verbose.log ==="
-            tail -80 build-verbose.log || true
-          else
-            echo "No failing package found in build.log" >&2
+          set -uo pipefail
+          failed=$(grep 'ERROR:.*failed to build' build.log | head -1 | sed 's/.*ERROR: \(.*\) failed to build.*/\1/' || true)
+          echo "失败目标：${failed:-<未识别>}"
+          if [ -z "$failed" ]; then
             tail -150 build.log || true
+            exit 0
           fi
+
+          # 目标名可能是 target/linux 这类目录，也可能是包名。
+          # 之前无条件拼成 package/<名>/compile：遇到 target/linux 就变成
+          # 「No rule to make target 'package/target/linux/compile'」，等于什么都没重试。
+          case "$failed" in
+            target/*|toolchain/*|tools/*)
+              echo "=== $failed 是顶层目录：按 $failed/install 重试（镜像组装就发生在 install 阶段）==="
+              make "$failed/install" V=s -j1 2>&1 | tee build-verbose.log || true
+              if ! grep -qE 'Error [0-9]+|error:|No rule to make target' build-verbose.log; then
+                echo "=== install 没有报错，再按 $failed/compile 重试 ==="
+                make "$failed/compile" V=s -j1 2>&1 | tee -a build-verbose.log || true
+              fi
+              ;;
+            *)
+              echo "=== Rebuilding package/$failed with V=s ==="
+              make "package/$failed/compile" V=s -j1 2>&1 | tee build-verbose.log || true
+              ;;
+          esac
+
+          {
+            echo "=== failed target: $failed ==="
+            bash scripts/summarize-build-errors.sh build.log || true
+            echo
+            echo "=== logs/ 目录 ==="
+            ls -la logs 2>/dev/null | head -30 || echo "no logs/ directory"
+            echo
+            echo "=== build-verbose.log 关键行 ==="
+            grep -nE 'error:|Error [0-9]+|FAILED|No rule to make target|Stop\.|undefined reference|not found' build-verbose.log 2>/dev/null | head -60 || echo "no markers"
+            echo
+            echo "=== build-verbose.log 末尾 120 行 ==="
+            tail -120 build-verbose.log 2>/dev/null || true
+            echo
+            echo "=== bin/targets 现状 ==="
+            find bin/targets -maxdepth 3 -type f 2>/dev/null | head -40 || true
+          } > build-failure.log 2>&1 || true
+          echo "=== build-failure.log ==="
+          cat build-failure.log || true
 
       - name: Verify device isolation
         shell: bash
@@ -362,7 +394,7 @@ jobs:
         if: always()
         run: |
           if [ -f build.log ]; then
-            bash scripts/summarize-build-errors.sh build.log || true
+            bash scripts/summarize-build-errors.sh build.log | tee build-errors.txt || true
             tail -100 build.log
           fi
           echo "=== List all files in bin/targets/airoha/an7581/ ==="
@@ -381,6 +413,8 @@ jobs:
           path: |
             build.log
             build-verbose.log
+            build-failure.log
+            build-errors.txt
             configure.log
             defconfig-control.log
             .config
@@ -390,6 +424,8 @@ jobs:
             bin/targets/airoha/an7581/feeds.buildinfo
             bin/targets/airoha/an7581/version.buildinfo
             bin/targets/airoha/an7581/sha256sums
+          # .config 是隐藏文件：不打开这个开关它不会被上传（上一轮诊断就吃了这个亏）
+          include-hidden-files: true
           retention-days: 30
         if: always()
 
