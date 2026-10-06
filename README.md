@@ -23,7 +23,7 @@
 - [一、与原仓库的差异](#一与原仓库的差异)
 - [二、预装插件](#二预装插件)
 - [三、快速开始](#三快速开始)
-- [四、上游 packages feed 回归与规避](#四上游-packages-feed-回归与规避重要)
+- [四、构建期诊断：Configure 卡在哪、怎么定位](#四构建期诊断configure-卡在哪怎么定位)
 - [五、构建](#五构建)
 - [六、设备与硬件](#六设备与硬件)
 - [七、固件特性与默认行为](#七固件特性与默认行为)
@@ -41,7 +41,7 @@
 | 设备范围 | XR1710G + XG2010G | **仅 XR1710G**（`1710.config` 一次出两套镜像） |
 | 新增目录 | — | [`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/daed-web`](PATCH/daed-web)（daed WebUI 覆盖层）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)（主题中文翻译） |
 | LuCI 主题 | argon / bootstrap / glass | 追加 **footstrap 并设为默认开机主题**（`target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh`）；中文包按 luci feed 的实际命名 `luci-i18n-footstrap-zh-cn` 选择 |
-| feed 版本 | 全部跟随上游 master | `packages` 锁到 `2026-09-23` 的 `^10f1f42ef46f`（规避上游 Kconfig 递归回归，见下文） |
+| feed 版本 | 全部跟随上游 master | 同样不锁版本（`patches/feeds/**` 与 feed 必须同步演进，见第四节） |
 | 保留项 | — | 用户点名的 12 个 LuCI 应用、系统工具类应用（`ttyd`/`usteer`/`watchcat`/`wol`/`ddns`/`wifihistory`/`wifischedule`）、三个主题与中文语言包 |
 
 设备与系统类应用（`luci-app-airoha-npu`、`luci-app-airoha-fancontrol`、`luci-app-airoha-factory`、
@@ -109,23 +109,30 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 > LuCI 的「保留配置」不会保留额外安装的软件包。升级前请备份配置并记录已装软件包；升级后需重新安装
 > OpenClash、PassWall、AdGuard Home 等**非预装**组件，且必须使用与新固件同源的软件包，不要恢复旧固件的 `kmod-*`。
 
-## 四、上游 packages feed 回归与规避（重要）
+## 四、构建期诊断：Configure 卡在哪、怎么定位
 
-2026-09-24 之后上游 `immortalwrt/packages` 引入了 Kconfig 递归依赖（例如 2026-09-29 的
-`treewide: depend on audio-support for the audio group` 牵动 `sound/mpd`）：
+Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所以 `Apply feed patches` 与
+`Configure` 两步都会把输出 tee 到文件（`feed-patches.log` / `configure.log`），失败时随
+`gemtek-configure-diagnostics` artifact 上传 —— 任何失败都能在几分钟内看到原文，不必猜。
 
-1. `make defconfig` 直接 `error: recursive dependency detected!`（同时还有 `squeezelite-custom`
-   与 `SQUEEZELITE_WMA_ALAC` 的互相依赖）并以非 0 退出；
-2. defconfig 中断后，种子里 `CONFIG_PACKAGE_airoha-an7581-mt7996-board=m` 的 `=m → =y`
-   归一化不会发生；
-3. 紧接着 `scripts/check-gemtek-profile-isolation.sh` 报
-   `xr1710g config is missing required package: airoha-an7581-mt7996-board`，CI 就卡在 `Configure`。
+2026-10-06 的诊断结论：
 
-参考仓库 run#60（2026-09-23 成功）与 run#61（2026-09-24 失败）**用的是同一个 commit**，这正是
-「变的不是源码树、而是未锁定的 feed」的直接证据。
+1. `scripts/check-gemtek-profile-isolation.sh` 报
+   `xr1710g config is missing required package: airoha-an7581-mt7996-board`。该包在源码树里
+   确实存在（`package/network/config/airoha-an7581-mt7996-board`），种子里写的是 `=m`
+   （与参考仓库完全一致），正常应由 defconfig 归一成 `=y`；现在本仓库直接写成显式 `=y`，
+   不再依赖这一步归一化。
+2. 同一份日志里还有两条上游 feed 的 Kconfig 递归依赖告警（`PACKAGE_mpd-full` 自依赖、
+   `squeezelite-custom` 与 `SQUEEZELITE_WMA_ALAC` 互相依赖）。注意 `sound/squeezelite`
+   的最后一次改动是 2026-08-11 —— 说明这类告警在 2026-09-23 的成功构建里同样存在，
+   **并非致命错误**，不要为它去改 feed 或回退 feed。
+3. 曾试着把 `packages` feed 锁到 2026-09-23 来规避，结果 `Apply feed patches` 立刻失败：
+   `patches/feeds/**` 是按当前 feed 上下文写的，`git apply` 在旧 feed 上找不到上下文
+   （`Feed patch does not apply cleanly`）。**结论：feed 不锁版本**，补丁与 feed 必须同步演进。
 
-规避：`feeds.conf.default` 把 `packages` 锁到 `^10f1f42ef46f`（2026-09-23，最后一次成功构建当天），
-并把种子里板级包写成显式 `=y`。上游修复后去掉 `^commit` 后缀即可恢复跟随 master；其余 feed 不锁。
+另外修掉一个 CI 自身的坑：把配置步骤包成函数再放进 `if` 条件上下文时，bash 连函数体内的
+`set -e` 也不生效（手册明文），失败会被后面的 `grep` 成功掩盖 —— 第一版就是这样出现假绿灯的。
+现在改成 `step && step` 链 + `rc=$?` 显式判定，并用 `### 步骤名` 标出失败位置。
 
 ## 五、构建
 

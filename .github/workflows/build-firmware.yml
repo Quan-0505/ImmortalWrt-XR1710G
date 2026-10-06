@@ -80,7 +80,12 @@ jobs:
           bash scripts/fix-stale-golang-host.sh
 
       - name: Apply feed patches
-        run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+        shell: bash
+        run: |
+          set -o pipefail
+          # 留痕到文件：Actions 日志在本仓库读不到（token 无 Actions 读取权限），
+          # 补丁不干净时只有落进 artifact 才看得到是哪一个补丁。
+          FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh 2>&1 | tee feed-patches.log
 
       - name: Prepare kixdns and daed packages
         run: |
@@ -264,6 +269,7 @@ jobs:
           name: gemtek-configure-diagnostics
           path: |
             configure.log
+            feed-patches.log
             defconfig-control.log
             .config
           if-no-files-found: ignore
