@@ -191,6 +191,22 @@ jobs:
                                                 sum(len(fs) for _, _, fs in os.walk(web_dst))))
           PYEOF
 
+      - name: Prepare footstrap theme (LuCI)
+        run: |
+          set -e
+          # LuCI 主题 footstrap（VizzleTF/luci-theme-footstrap，锁 commit）+ 自译简体中文包。
+          # 与用户 OpenWrt 仓库同源同 pin，保证两台设备的主题版本一致。
+          rm -rf /tmp/luci-theme-footstrap
+          git clone -q --depth 1 https://github.com/VizzleTF/luci-theme-footstrap /tmp/luci-theme-footstrap
+          git -C /tmp/luci-theme-footstrap fetch -q --depth 1 origin 246337d51889860661bb4662b2c10f88c20d5ccd
+          git -C /tmp/luci-theme-footstrap checkout -q FETCH_HEAD
+          rm -rf package/new/luci-theme-footstrap
+          cp -rf /tmp/luci-theme-footstrap/luci-theme-footstrap package/new/luci-theme-footstrap
+          mkdir -p package/new/luci-theme-footstrap/po/zh_Hans
+          cp -f PATCH/theme-footstrap-zh/zh_Hans/footstrap.po package/new/luci-theme-footstrap/po/zh_Hans/footstrap.po
+          echo "theme commit: $(git -C /tmp/luci-theme-footstrap rev-parse HEAD)"
+          ls -la package/new/luci-theme-footstrap | head -20
+
       - name: Configure
         shell: bash
         run: |
@@ -198,6 +214,10 @@ jobs:
           # 全过程留痕到 configure.log：Actions 日志在本仓库不可读（token 无 Actions 读取权限），
           # 但 artifact 可以下载，因此失败原因必须落到文件里。
           configure() {
+            # 必须在函数内显式开启：函数被放进 if 条件上下文时，外层 bash -e 会被关掉，
+            # 否则 make defconfig 失败会被后面的 grep 成功掩盖（第一版就踩了这个坑）。
+            set -e
+            echo '### set-build-version'
             cp '${{ inputs.config_seed }}' .config
             BUILD_DATE='${{ steps.version.outputs.date }}' \
             BUILD_ID='${{ steps.version.outputs.build_id }}' \
@@ -205,8 +225,11 @@ jobs:
             UPSTREAM_COMMIT='${{ steps.version.outputs.upstream_commit }}' \
             VERSION_CODE='${{ steps.version.outputs.version_code }}' \
             bash scripts/set-build-version.sh .config
+            echo '### make defconfig'
             make defconfig
+            echo '### gemtek profile isolation'
             bash scripts/check-gemtek-profile-isolation.sh --config .config
+            echo '### version symbols'
             grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
           }
           if configure 2>&1 | tee configure.log; then
@@ -229,6 +252,18 @@ jobs:
             echo 'CONTROL=无法取得原始种子，跳过对照'
           fi
           exit 1
+
+      - name: Upload configure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gemtek-configure-diagnostics
+          path: |
+            configure.log
+            defconfig-control.log
+            .config
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Download sources
         run: make download -j$(nproc)
@@ -296,6 +331,22 @@ jobs:
           echo '=== 载荷与镜像 ==='
           ls -lh package/new/daed/prebuilt-data/usr/bin/daed package/new/kixdns/prebuilt/kixdns package/new/kixdns-stats/prebuilt/kixdns-stats-core
           ls -lh bin/targets/airoha/an7581/*.itb
+          echo '=== footstrap 主题 + 默认主题 ==='
+          for p in luci-theme-footstrap luci-i18n-footstrap-zh-cn; do
+            grep -Fqx "CONFIG_PACKAGE_${p}=y" .config || { echo "missing CONFIG_PACKAGE_${p}=y" >&2; exit 1; }
+            grep -E "^CONFIG_PACKAGE_${p}=y$" .config
+          done
+          theme_default=target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh
+          test -x "$theme_default" || { echo "默认主题脚本缺失或不可执行：$theme_default" >&2; exit 1; }
+          grep -Fq "luci-static/footstrap" "$theme_default"
+          cat "$theme_default"
+          n=$(find bin -name 'luci-theme-footstrap-*.apk' | wc -l)
+          echo "luci-theme-footstrap-*.apk -> $n"
+          [ "$n" -ge 1 ] || { echo 'no built footstrap theme package' >&2; exit 1; }
+          find bin -name 'luci-theme-footstrap-*.apk' -o -name 'luci-i18n-footstrap-*.apk' | sort
+          echo '=== 镜像 manifest 里的主题（证明真的装进镜像）==='
+          grep -E '^luci(-theme-footstrap|-i18n-footstrap-zh-cn)[[:space:]]' bin/targets/airoha/an7581/*manifest \
+            || { echo 'footstrap not found in image manifest' >&2; exit 1; }
 
       - name: Check build status
         if: always()
