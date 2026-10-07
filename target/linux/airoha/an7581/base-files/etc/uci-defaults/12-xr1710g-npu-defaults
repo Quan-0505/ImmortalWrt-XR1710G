@@ -1,0 +1,8 @@
+#!/bin/sh
+# airoha-npu 的 init 脚本在真机上 start 会长时间挂住（>3 分钟无返回）：
+# 可执行位一旦修好，S89airoha-npu 会在开机时真的执行，可能把启动卡死。
+# 因此保持自启关闭；需要 NPU 卸载时手动：/etc/init.d/airoha-npu enable && /etc/init.d/airoha-npu start
+[ -x /etc/init.d/airoha-npu ] || exit 0
+/etc/init.d/airoha-npu disable
+
+exit 0
