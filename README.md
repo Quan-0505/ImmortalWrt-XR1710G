@@ -163,8 +163,7 @@ Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所
    （`CONFIG_TARGET_PROFILE="DEVICE_gemtek_xr1710g-ubi"`）；从 2026-09-27 那份种子开始，
    主符号变成 `is not set`，只剩派生形式
    `CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_gemtek_xr1710g=y` —— 于是
-   `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。上游仓库 run#62/#63 与本仓库
-   前几轮卡的都是这一条（`TARGET_PROFILE` 也从 `-ubi` 变成了非 ubi 那台）。
+   `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。本仓库前几轮卡的都是这一条（`TARGET_PROFILE` 也从 `-ubi` 变成了非 ubi 那台）。
 
 修复：`1710.config` 用**主符号**把两台设备都选上（`gemtek_xr1710g` 与 `gemtek_xr1710g-ubi` 各一行
 `=y`；实测 defconfig 会按 choice 折叠为 `-ubi` 一台，与 2026-09-23 那次成功构建的 profile 一致），
