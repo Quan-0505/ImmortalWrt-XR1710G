@@ -15,7 +15,7 @@
 **只维护 XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND）· 基于
 [naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed) 定制
 
-[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [🧩 预装插件](#-预装插件) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译)
+[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译)
 
 </div>
 
@@ -54,45 +54,6 @@
 
 ---
 
-<a id="plugins"></a>
-## 🧩 预装插件
-
-
-### kixdns
-
-| 项目 | 说明 |
-|------|------|
-| 来源 | [JohnsonRan/luci-app-kixdns](https://github.com/JohnsonRan/luci-app-kixdns) v1.6.0（预编译二进制，作者发布包） |
-| 组成 | `kixdns`（DNS 内核）、`kixdns-stats`（统计）、`luci-app-kixdns` + 中文语言包 |
-| 安装方式 | 构建时从 24.10 的 `aarch64_cortex-a53` 发布包中解出 `usr/bin/kixdns`、`usr/libexec/kixdns-stats-core`，放入 `package/new/*/prebuilt/` 后随包编译 |
-| LuCI 入口 | 服务 → KixDNS |
-
-### rust-daed（DaedNext）
-
-| 项目 | 说明 |
-|------|------|
-| 来源 | [Quan-0505/rust-daed](https://github.com/Quan-0505/rust-daed) v3.1.3 的 `rust-daed-r2s.apk` 载荷 |
-| 二进制 | `usr/bin/daed`：**静态链接 AArch64**（Cortex-A53，与本机同架构），无动态依赖 |
-| 随包内容 | `etc/init.d/daed`（procd 服务）、`/etc/config/daed`、`usr/share/daed/web`（内嵌 UI，构建时用本仓库 `PATCH/daed-web` 覆盖为最新 WebUI） |
-| 内核前提 | eBPF/CO-RE 需要 **BTF**，因此本仓库在内核配置里启用 `DEBUG_INFO_BTF` 并关闭 `DEBUG_INFO_REDUCED`（见上表） |
-| 访问方式 | 启动后浏览器打开 `http://192.168.2.1:2023`（首次访问在页面内设置面板账号密码） |
-| 服务管理 | `/etc/init.d/daed start\|stop\|restart`；配置在 `/etc/config/daed` |
-
-升级插件版本：改 `.github/workflows/build-firmware.yml` 里 `Fetch plugin prebuilt payloads` 步骤的
-release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版本号即可，无需改包定义。
-
-### footstrap（LuCI 主题，默认主题）
-
-| 项目 | 说明 |
-|------|------|
-| 来源 | luci feed 自带的 `luci-theme-footstrap`（`feeds/luci/themes/luci-theme-footstrap`），不额外锁版本 |
-| 预装 | `luci-theme-footstrap` + 自译简体中文包：构建时把 `PATCH/theme-footstrap-zh/zh_Hans/footstrap.po` 补进 feed 主题的 `po/zh_Hans/`，由 luci.mk 生成 `luci-i18n-footstrap-zh-cn` |
-| 默认主题 | 首次开机即 footstrap：`target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh` 把 `luci.main.mediaurlbase` 写成 `/luci-static/footstrap`（编号 91 保证排在主题包自带默认值之后） |
-| 手动切换 | LuCI → 系统 → 系统 → 语言和界面 → 设计；也可 `uci set luci.main.mediaurlbase='/luci-static/footstrap' && uci commit luci` |
-
----
-
-<a id="downloads"></a>
 ## 📦 固件下载
 
 最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后会附上
@@ -234,7 +195,7 @@ bash scripts/summarize-build-errors.sh build.log
 - `915-01`、`916-02`、`9990`、`9993`、`9999-11`：PPE/flowtable 硬件卸载、WLAN 流绑定、VLAN ingress 与 XFRM 流支持。
 - 无线栈：mt76 `001`（mt7996 PS sync TLV/MLO 稳定性）与 `9993`（operating-mode rate control）、
   mac80211 `411-mac80211-export-link-sta-capability-limits.patch`、hostapd（6GHz/EHT/radio mask/多 VAP 稳定性）。
-- 本仓库追加的内核项：BTF/BPF/veth/clsact（供 daed 使用，见第一节）。
+- 本仓库追加的内核项：BTF/BPF/veth/clsact（供 daed 使用）。
 
 ### 启动与设备定制
 
@@ -264,7 +225,7 @@ bash scripts/summarize-build-errors.sh build.log
 `default-settings-chn`。
 
 **代理与网络核心**：`xray-core`、`simple-obfs-client`、`chinadns-ng`、`geoview`、`dns2socks`、
-`microsocks`、`ipt2socks`。**插件**：`kixdns`(+stats)、`daed`（见第二节）。
+`microsocks`、`ipt2socks`。**插件**：`kixdns`(+stats)、`daed`（rust-daed）。
 
 **未收录**：`lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、`rtp2httpd`、
 `wechatpush`、`timewol`（含各自的 LuCI 应用与中文语言包）。
