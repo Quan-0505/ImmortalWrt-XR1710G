@@ -219,8 +219,8 @@ feed 目录（`feeds/packages/net/daed`），或把补丁/翻译直接补进 fee
 ### GitHub Actions（推荐）
 
 1. Actions → **Build Firmware** → Run workflow；
-2. 参数：`config_seed = 1710.config`（默认）、`release_type = none | prerelease | release`；
-3. 产物：运行页面的 Artifacts（`gemtek-1710.config-firmware`），或 `release_type` 非 `none` 时自动创建 Release。
+2. 参数：`config_seed = 1710.config`（UBI 布局，默认）或 `1710-factory.config`（原版 U-Boot 分区）、`release_type = none | prerelease | release`；
+3. 产物：运行页面的 Artifacts（`gemtek-<种子名>-firmware`），或 `release_type` 非 `none` 时自动创建 Release。
 
 构建流程（`.github/workflows/build-firmware.yml`）在标准 ImmortalWrt 流程之上多了三步：
 
@@ -356,7 +356,8 @@ bash scripts/summarize-build-errors.sh build.log
 
 ```
 .github/workflows/     build-firmware.yml（构建+发布）、sync-upstream.yml（跟随上游）
-1710.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g-ubi（UBI 布局）
+1710.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g-ubi（OpenWrt U-Boot UBI 布局）
+1710-factory.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g（原版 U-Boot 分区）
 2010.config            上游遗留（XG2010G），本仓库不构建
 PATCH/daed-pkg/daed/   daed 包定义（版本、安装规则、prebuilt-data 装载）
 PATCH/daed-web/        daed WebUI 覆盖层（构建时覆盖到 usr/share/daed/web）
