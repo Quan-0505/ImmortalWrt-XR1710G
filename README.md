@@ -22,38 +22,35 @@
 ---
 
 
-只针对 **Gemtek / Brightspeed XR1710G**（Airoha AN7581GT）的 ImmortalWrt 固件。设备树、内核与无线补丁、
-分区/刷写方案全部继承自 [naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)，
-本仓库在原仓库基础上只做三件事：
-1. **只预装两个插件**：`kixdns`（含统计）与 `rust-daed`（DaedNext）；
-2. **默认管理地址改为 `192.168.2.1`**（与原仓库的 `192.168.50.1` 不同）；
-3. **补齐 daed 需要的 eBPF 内核前提**（BTF / BPF / veth / clsact），并裁掉一批用不到的第三方插件。
-> 本仓库只维护 XR1710G。CI 实际构建的 profile 是 `DEVICE_gemtek_xr1710g-ubi`
-> （`config.buildinfo` 可证：`CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`），
-> 即 **OpenWrt U-Boot UBI 布局**那一套镜像；源码树里另有原厂 U-Boot 布局的设备定义
-> （`gemtek_xr1710g`），需要时把 profile 切过去自行构建。
-> 原仓库里的 XG2010G / PON 支持仍然存在于源码树中（`2010.config` 等），但本仓库不构建、不验证。
+面向 **Gemtek / Brightspeed XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND / Wi-Fi 7 MT7996AV）
+的 ImmortalWrt 25.12 固件，由 GitHub Actions 构建与发布。
+
+- **预装两个插件**：`kixdns`（含统计与 LuCI 应用）与 `daed`（DaedNext，rust-daed v3.1.3，内嵌 UI）；
+- **默认管理地址 `192.168.2.1`**（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）；
+- **补齐 daed 的 eBPF 内核前提**（BTF / BPF / veth / clsact），并裁掉用不到的第三方插件；
+- **只构建 XR1710G**：CI 的 profile 是 `DEVICE_gemtek_xr1710g-ubi`（`config.buildinfo` 可证：
+  `CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`），即 **OpenWrt U-Boot UBI 布局**
+  那一套镜像；源码树里另有原厂 U-Boot 布局的设备定义（`gemtek_xr1710g`），需要时切过去自行构建。
 
 ---
 
 <a id="diff"></a>
-## 🔀 与原仓库的差异
+## 🧭 本仓库做了什么
 
-
-| 项目 | 原仓库 | 本仓库 |
-|------|--------|--------|
-| 预装插件 | `lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、`rtp2httpd`、`wechatpush`、`timewol` | **只留 `kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`**，上述第三方全部关闭 |
-| 默认管理地址 | `192.168.50.1` | **`192.168.2.1`**（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`） |
-| 内核配置 | `CONFIG_DEBUG_INFO=y` + `DEBUG_INFO_REDUCED=y` | 追加 `DEBUG_INFO_BTF`、`BPF`、`BPF_SYSCALL`、`BPF_JIT(_ALWAYS_ON)`、`VETH`、`NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`，并**关闭 `DEBUG_INFO_REDUCED`**（生成完整 BTF，daed 的 eBPF 依赖它） |
-| 设备范围 | XR1710G + XG2010G | **仅 XR1710G**（profile = `DEVICE_gemtek_xr1710g-ubi`，UBI 布局） |
-| 新增目录 | — | [`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/daed-web`](PATCH/daed-web)（daed WebUI 覆盖层）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)（主题中文翻译） |
-| LuCI 主题 | argon / bootstrap / glass | 追加 **footstrap 并设为默认开机主题**（`target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh`）；中文包按 luci feed 的实际命名 `luci-i18n-footstrap-zh-cn` 选择 |
-| feed 版本 | 全部跟随上游 master | 同样不锁版本（`patches/feeds/**` 与 feed 必须同步演进，见第四节） |
-| 保留项 | — | 用户点名的 12 个 LuCI 应用、系统工具类应用（`ttyd`/`usteer`/`watchcat`/`wol`/`ddns`/`wifihistory`/`wifischedule`）、三个主题与中文语言包 |
-
-设备与系统类应用（`luci-app-airoha-npu`、`luci-app-airoha-fancontrol`、`luci-app-airoha-factory`、
-`luci-app-airoha-recovery`、`luci-app-mesh-conf`、`luci-app-netmode`、`luci-app-upnp`、`luci-app-firewall`、
-`luci-app-arpbind`、`luci-app-mlo`、`luci-app-package-manager`、`luci-app-autoreboot`）全部保留。
+- **预装插件**：`kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`（rust-daed 3.1.3，内嵌 UI）；
+  其余第三方插件一律关闭。
+- **默认管理地址**：`192.168.2.1`（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）。
+- **内核**：开启 `DEBUG_INFO_BTF`、`BPF`、`BPF_SYSCALL`、`BPF_JIT(_ALWAYS_ON)`、`VETH`、
+  `NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`，并关闭 `DEBUG_INFO_REDUCED`，生成完整 BTF
+  （daed 的 eBPF/CO-RE 依赖它）。
+- **设备范围**：仅 XR1710G，profile = `DEVICE_gemtek_xr1710g-ubi`（UBI 布局）。
+- **新增目录**：[`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/daed-web`](PATCH/daed-web)
+  （daed WebUI 覆盖层）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)（主题中文翻译）。
+- **主题**：LuCI 默认开机主题为 **footstrap**（含简体中文包），由
+  `target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh` 在首次开机时设定。
+- **保留项**：设备与系统类 LuCI 应用（`luci-app-airoha-*`、`mesh-conf`、`netmode`、`upnp`、`firewall`、
+  `arpbind`、`mlo`、`package-manager`、`autoreboot`）、系统工具类应用（`ttyd`/`usteer`/`watchcat`/`wol`/
+  `ddns`/`wifihistory`/`wifischedule`）、三个主题与中文语言包。
 
 ---
 
@@ -88,8 +85,8 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 
 | 项目 | 说明 |
 |------|------|
-| 来源 | [VizzleTF/luci-theme-footstrap](https://github.com/VizzleTF/luci-theme-footstrap)，锁 commit `246337d5…`（与你 OpenWrt 仓库用的是同一个 pin，两台设备主题版本一致） |
-| 预装 | `luci-theme-footstrap` + 自译简体中文包（`PATCH/theme-footstrap-zh/zh_Hans/footstrap.po` → 由 luci.mk 生成 `luci-i18n-footstrap-zh-cn`） |
+| 来源 | luci feed 自带的 `luci-theme-footstrap`（`feeds/luci/themes/luci-theme-footstrap`），不额外锁版本 |
+| 预装 | `luci-theme-footstrap` + 自译简体中文包：构建时把 `PATCH/theme-footstrap-zh/zh_Hans/footstrap.po` 补进 feed 主题的 `po/zh_Hans/`，由 luci.mk 生成 `luci-i18n-footstrap-zh-cn` |
 | 默认主题 | 首次开机即 footstrap：`target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh` 把 `luci.main.mediaurlbase` 写成 `/luci-static/footstrap`（编号 91 保证排在主题包自带默认值之后） |
 | 手动切换 | LuCI → 系统 → 系统 → 语言和界面 → 设计；也可 `uci set luci.main.mediaurlbase='/luci-static/footstrap' && uci commit luci` |
 
@@ -166,11 +163,11 @@ Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所
    （`CONFIG_TARGET_PROFILE="DEVICE_gemtek_xr1710g-ubi"`）；从 2026-09-27 那份种子开始，
    主符号变成 `is not set`，只剩派生形式
    `CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_gemtek_xr1710g=y` —— 于是
-   `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。参考仓库 run#62/#63 与本仓库
+   `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。上游仓库 run#62/#63 与本仓库
    前几轮卡的都是这一条（`TARGET_PROFILE` 也从 `-ubi` 变成了非 ubi 那台）。
 
 修复：`1710.config` 用**主符号**把两台设备都选上（`gemtek_xr1710g` 与 `gemtek_xr1710g-ubi` 各一行
-`=y`；实测 defconfig 会按 choice 折叠为 `-ubi` 一台，与参考仓库 09-23 成功那次的 profile 一致），
+`=y`；实测 defconfig 会按 choice 折叠为 `-ubi` 一台，与 2026-09-23 那次成功构建的 profile 一致），
 `TARGET_PROFILE` 对齐绿灯种子，并额外显式写
 `CONFIG_PACKAGE_airoha-an7581-mt7996-board=y` 作为双保险。
 
@@ -253,7 +250,7 @@ bash scripts/apply-feed-patches.sh
 # 插件装配（与 CI 一致）：kixdns 源码 + daed 包定义
 git clone -q --depth 1 -b v1.6.0 https://github.com/JohnsonRan/luci-app-kixdns /tmp/luci-app-kixdns
 mkdir -p package/new && cp -rf /tmp/luci-app-kixdns/{kixdns,luci-app-kixdns,kixdns-stats} package/new/
-cp -rf PATCH/daed-pkg/daed package/new/daed
+rm -rf feeds/packages/net/daed && cp -rf PATCH/daed-pkg/daed feeds/packages/net/daed
 # 以及 workflow 中「Fetch plugin prebuilt payloads」两步（下载解包预编译载荷）
 
 cp 1710.config .config
@@ -332,7 +329,7 @@ bash scripts/summarize-build-errors.sh build.log
 
 ### 网络与无线默认行为
 
-- 默认 LAN 地址由构建配置的 `CONFIG_TARGET_PREINIT_IP` 决定：**本仓库为 `192.168.2.1`**（原仓库为 `192.168.50.1`）。
+- 默认 LAN 地址由构建配置的 `CONFIG_TARGET_PREINIT_IP` 决定：**`192.168.2.1`**。
 - IPv6 使用 SLAAC/EUI-64，关闭 DHCPv6/NDP 与 RA DNS/附加标志，减少国内网络环境下的兼容问题。
 - 默认开启软件/硬件 flow offload；NPU 与 Wi-Fi 流绑定补丁已包含在内。
 
@@ -354,8 +351,8 @@ bash scripts/summarize-build-errors.sh build.log
 **代理与网络核心**：`xray-core`、`simple-obfs-client`、`chinadns-ng`、`geoview`、`dns2socks`、
 `microsocks`、`ipt2socks`。**插件**：`kixdns`(+stats)、`daed`（见第二节）。
 
-**已从原仓库裁剪**：`lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、
-`rtp2httpd`、`wechatpush`、`timewol`（含各自的 LuCI 应用与中文语言包）。
+**未收录**：`lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、`rtp2httpd`、
+`wechatpush`、`timewol`（含各自的 LuCI 应用与中文语言包）。
 
 ---
 
@@ -387,18 +384,13 @@ Release 约定：Tag 形如 `YYYYMMDD-<short-hash>`，名称含构建日期与�
 ---
 
 <a id="credits"></a>
-## 🤝 致谢与许可
+## 🤝 致谢
 
+本仓库的设备移植、设备树、内核与无线补丁来自 [@naoki66](https://github.com/naoki66) 的
+[ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)；
+固件基于 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) 与 OpenWrt 生态；
+`kixdns` 来自 [JohnsonRan/luci-app-kixdns](https://github.com/JohnsonRan/luci-app-kixdns)。
 
-**设备支持与补丁全部来自上游项目**，本仓库只做插件装配与配置裁剪：
-
-- [naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed) —— XR1710G/XG2010G 移植与全部内核/无线补丁
-- [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt)、[immortalwrt/luci](https://github.com/immortalwrt/luci)、[immortalwrt/packages](https://github.com/immortalwrt/packages)
-- [openwrt/mt76](https://github.com/openwrt/mt76)（MediaTek Wi-Fi 驱动）、[openwrt/routing](https://github.com/openwrt/routing)
-- [YYH2913/openwrt](https://github.com/YYH2913/openwrt)（XR1710G 6.18 内核集成参考）、[hurrian/openwrt-w1700k](https://github.com/hurrian/openwrt-w1700k)（PCIe 3.0 x2 补丁参考）、[lvcdy/openwrt_xr1710g](https://github.com/lvcdy/openwrt_xr1710g)（早期移植参考）
-- [naoki66/luci-app-airoha](https://github.com/naoki66/luci-app-airoha)（Airoha LuCI 应用 feed）、[Gilly1970/Gemtek-W1700K](https://github.com/Gilly1970/Gemtek-W1700K)（风扇控制与 FlowSense）
-
-**插件来源**：[JohnsonRan/luci-app-kixdns](https://github.com/JohnsonRan/luci-app-kixdns)（kixdns）、
-[Quan-0505/rust-daed](https://github.com/Quan-0505/rust-daed)（daed / DaedNext）。
+感谢以上作者与上游社区的公开工作。
 
 许可证：[GPL-2.0-only](https://spdx.org/licenses/GPL-2.0-only.html)（继承 ImmortalWrt）。

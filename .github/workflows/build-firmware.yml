@@ -462,9 +462,7 @@ jobs:
             echo ""
             echo "---"
             echo ""
-            echo "如果您觉得对您有帮助，请我喝杯咖啡吧，让我更有动力持续更新。"
-            echo ""
-            echo '<img width="400" height="400" alt="c6ea388c976395326514814f80d512d5" src="https://github.com/user-attachments/assets/0ac90d58-ac73-4dc1-b926-276e539e5d0f" />'
+            echo "感谢 @naoki66 的设备移植与补丁，以及 ImmortalWrt / OpenWrt 上游社区的工作。"
           } > /tmp/release_body.md
           {
             echo "body<<EOF"
