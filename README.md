@@ -97,8 +97,7 @@ release tag（daed）与 `Prepare kixdns and daed packages` 步骤的 kixdns 版
 
 最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后会附上
 `*.itb` 镜像与 `config.buildinfo` / `feeds.buildinfo` / `version.buildinfo` / `sha256sums`。
-本仓库 CI 产出的是 **OpenWrt U-Boot UBI 布局**那一套（原厂 U-Boot 布局的设备定义在源码树里但未被
-profile 选中，两种布局**不能互刷**），刷写细节见
+CI 会分别构建**两种闪存布局**，按当前布局选对应文件（两种布局**不能互刷**），刷写细节见
 [🚀 快速开始](#-快速开始)。
 
 ---
@@ -120,10 +119,6 @@ profile 选中，两种布局**不能互刷**），刷写细节见
   - 原版 U-Boot 分区：`immortalwrt-*-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb`
   - OpenWrt U-Boot UBI 布局：`immortalwrt-*-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb`
 
-  > **本仓库 CI 目前只产出第二条（`-ubi`）**：种子里两个设备符号都写了，但 defconfig 的 choice 会
-  > 把单选收敛为一台（构建日志里的 `changes choice state` 警告即此），最终 `config.buildinfo` 里
-  > 只有 `CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`。要原厂 U-Boot 布局那套，
-  > 需自行把 profile 切到 `gemtek_xr1710g` 再构建。
 - 常规升级：LuCI → 系统 → 备份/升级 → 刷写固件（选择与当前布局**匹配**的那个文件）。
 
 > [!WARNING]
@@ -283,7 +278,7 @@ bash scripts/summarize-build-errors.sh build.log
 
 | 设备 | 构建配置 | 设备树 |
 |------|----------|--------|
-| Gemtek/Brightspeed XR1710G（原版 U-Boot 分区） | [`1710.config`](1710.config) | [`an7581-xr1710g.dts`](target/linux/airoha/dts/an7581-xr1710g.dts) |
+| Gemtek/Brightspeed XR1710G（原版 U-Boot 分区） | [`1710-factory.config`](1710-factory.config) | [`an7581-xr1710g.dts`](target/linux/airoha/dts/an7581-xr1710g.dts) |
 | Gemtek/Brightspeed XR1710G（OpenWrt U-Boot UBI 布局） | [`1710.config`](1710.config) | [`an7581-gemtek-xr1710g-ubi.dts`](target/linux/airoha/dts/an7581-gemtek-xr1710g-ubi.dts) |
 
 无线规格（MT7996AV，BE19000）：
