@@ -56,8 +56,8 @@
 
 ## 📦 固件下载
 
-最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后会附上
-`*.itb` 镜像与 `config.buildinfo` / `feeds.buildinfo` / `version.buildinfo` / `sha256sums`。
+最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后附上
+`*.itb` 镜像；构建配置与镜像 sha256 见同次 Actions 运行的 Artifacts。
 CI 会分别构建**两种闪存布局**，按当前布局选对应文件（两种布局**不能互刷**），刷写细节见
 [🚀 快速开始](#-快速开始)。
 
