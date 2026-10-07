@@ -15,7 +15,7 @@
 **只维护 XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND）· 基于
 [naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed) 定制
 
-[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [🧩 预装插件](#-预装插件) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译) · [🐞 踩坑记录](#-构建期踩坑记录)
+[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [🧩 预装插件](#-预装插件) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译)
 
 </div>
 
@@ -134,85 +134,6 @@ CI 会分别构建**两种闪存布局**，按当前布局选对应文件（两�
 
 ---
 
-<a id="diagnostics"></a>
-## 🐞 构建期踩坑记录
-
-
-Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所以 `Apply feed patches` 与
-`Configure` 两步都会把输出 tee 到文件（`feed-patches.log` / `configure.log`），失败时随
-`gemtek-configure-diagnostics` artifact 上传 —— 任何失败都能在几分钟内看到原文，不必猜。
-
-证据链（run#6 的 `configure.log` + 三份种子对比）：
-
-1. **`make defconfig` 是成功的**：日志里 `### make defconfig` 之后走到了
-   `### gemtek profile isolation`，说明链条没有停在 defconfig。日志里那些
-   `recursive dependency detected`（`PACKAGE_mpd-full` 自依赖、`squeezelite-custom` 与
-   `SQUEEZELITE_WMA_ALAC` 互相依赖）**只是告警**：`sound/squeezelite` 最后一次改动是
-   2026-08-11，2026-09-23 的成功构建同样带着它。
-2. 真正失败的是 `scripts/check-gemtek-profile-isolation.sh`：
-   `xr1710g config is missing required package: airoha-an7581-mt7996-board`。该包是
-   `HIDDEN:=1`，它的值由设备定义 `target/linux/airoha/image/an7581.mk` 中
-   `Device/gemtek_xr1710g-common` 的 `DEVICE_PACKAGES` 推导，**种子里的显式值会被 defconfig 覆盖**。
-3. 所以关键在设备符号。2026-09-23 的绿灯种子用的是主符号
-   `CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`
-   （`CONFIG_TARGET_PROFILE="DEVICE_gemtek_xr1710g-ubi"`）；从 2026-09-27 那份种子开始，
-   主符号变成 `is not set`，只剩派生形式
-   `CONFIG_TARGET_DEVICE_airoha_an7581_DEVICE_gemtek_xr1710g=y` —— 于是
-   `DEVICE_PACKAGES` 不再推导进 `.config`，隔离检查必然失败。本仓库前几轮卡的都是这一条（`TARGET_PROFILE` 也从 `-ubi` 变成了非 ubi 那台）。
-
-修复：`1710.config` 用**主符号**把两台设备都选上（`gemtek_xr1710g` 与 `gemtek_xr1710g-ubi` 各一行
-`=y`；实测 defconfig 会按 choice 折叠为 `-ubi` 一台，与 2026-09-23 那次成功构建的 profile 一致），
-`TARGET_PROFILE` 对齐绿灯种子，并额外显式写
-`CONFIG_PACKAGE_airoha-an7581-mt7996-board=y` 作为双保险。
-
-另外两条经验：
-
-- **feed 不要锁版本**。曾把 `packages` 锁到 2026-09-23 想绕过上游告警，`Apply feed patches`
-  立刻失败：`patches/feeds/**` 是按当前 feed 上下文写的，`git apply` 在旧 feed 上找不到上下文
-  （脚本对「feed 存在但补丁打不上」是 `exit 1`）。上游出问题就加 `patches/feeds/**` 补丁。
-- **不要在条件上下文里用函数包装会失败的步骤**：bash 连函数体内的 `set -e` 也不生效（手册明文），
-  失败会被后面的 `grep` 成功掩盖 —— 第一版就是这样做出了假绿灯。现在改成
-  `step && step` 链 + `rc=$?` 显式判定，并用 `### 步骤名` 标出失败位置。
-
----
-
-### 2026-10-06：镜像阶段（FIT）找不到 DTB
-
-`Configure` 与内核编译都正常，但 `target/linux install` 组镜像时失败：
-
-```
-FATAL ERROR: Couldn't open ".../build_dir/.../linux-airoha_an7581/image--xr1710g-ubi.dtb": No such file or directory
-make[4]: *** [Makefile:33: ...-squashfs-sysupgrade.itb] Error 1
-```
-
-- DTB 实际编译成 `$(KDIR)/image-an7581-gemtek-xr1710g-ubi.dtb`（设备块的 `DEVICE_DTS` 生效）；
-- 组 FIT 时 `mkits.sh -d` 拿到的却是 `$(KDIR)/image--xr1710g-ubi.dtb`，正是 `Device/Default` 里
-  `$(SOC)-$(lastword $(subst _, ,$(1)))` 在 `SOC` 为空时的结果；
-- 2026-09-23 那次能过属于巧合：当时 ubi 设备的 `DEVICE_DTS`（`an7581-xr1710g-ubi`）恰好等于该公式
-  的结果。作者后来把 DTS 改名为 `an7581-gemtek-xr1710g-ubi`，两者不再相等，问题才暴露。
-
-修法：两台设备的 `IMAGE/sysupgrade.itb` 与 `KERNEL_INITRAMFS` 直接写**字面** DTB 路径（不经过变量
-查找，作用域问题无从发生），见 [target/linux/airoha/image/an7581.mk](target/linux/airoha/image/an7581.mk)。
-
-### 2026-10-06：同名包被 feed 遮蔽（daed 与主题都中招）
-
-`Build Firmware` 成功后，`Verify plugin integration` 报缺 `CONFIG_PACKAGE_luci-i18n-footstrap-zh-cn=y`。
-把 run#9 的 `build.log` 与镜像 manifest 对照，才看清真正发生的事：
-
-| 观察（build.log / manifest） | 含义 |
-| --- | --- |
-| `make[3] -C feeds/packages/net/daed compile` | 编的是 **feed 里的上游 Go 版 daed**，不是 `PATCH/daed-pkg` 的 rust-daed |
-| manifest `daed - 1.27.0-r1`（我们的打包版本是 `3.1.3`） | 同一事实的另一条独立证据 |
-| `make[3] -C feeds/luci/themes/luci-theme-footstrap compile` | 编的是 **feed 自带的主题**，`package/new/` 那份（含中文 po）从未参与构建 |
-| manifest 有 `luci-theme-footstrap`、无 `luci-i18n-footstrap-zh-cn` | 没有 po → `luci.mk` 不生成中文包 → 种子里的符号被 `make defconfig` 静默丢弃 |
-
-结论：**同名包放进 `package/new/` 会被 `package/feeds/<feed>/` 遮蔽**，本地副本只是摆设。修法是就地替换
-feed 目录（`feeds/packages/net/daed`），或把补丁/翻译直接补进 feed 里的那棵树（主题的 `po/zh_Hans/`）。
-
-顺带记下 LuCI 的命名规则：i18n 包名后缀取自 `luci.mk` 的 `LUCI_LC_ALIAS`（`zh_Hans` → `zh-cn`），
-所以种子要写 `luci-i18n-footstrap-zh-cn`，而 po 目录必须叫 `po/zh_Hans/`；po **文件名**不参与命名。
-
-<a id="build"></a>
 ## 🔧 自行编译
 
 
