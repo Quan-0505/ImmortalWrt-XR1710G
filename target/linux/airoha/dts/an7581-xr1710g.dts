@@ -283,7 +283,6 @@
 	reg = <0x0 0x1fa20000 0x0 0x2c0
 	       0x0 0x1efbe000 0x0 0x800>;
 	reg-names = "chip-scu", "mcucfg";
-	airoha,force-direct-pll;
 };
 
 &cpu_opp_table {
@@ -295,16 +294,6 @@
 	opp-1300000000 {
 		opp-hz = /bits/ 64 <1300000000>;
 		required-opps = <&smcc_opp16>;
-	};
-
-	opp-1350000000 {
-		opp-hz = /bits/ 64 <1350000000>;
-		required-opps = <&smcc_opp17>;
-	};
-
-	opp-1400000000 {
-		opp-hz = /bits/ 64 <1400000000>;
-		required-opps = <&smcc_opp18>;
 	};
 };
 

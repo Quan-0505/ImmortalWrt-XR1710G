@@ -18,7 +18,7 @@ uci -q get cpufreq.cpufreq >/dev/null || exit 0
 [ "$(uci -q get cpufreq.global.set)" = "1" ] && exit 0
 
 uci -q set cpufreq.cpufreq.governor0="$governor"
-uci -q set cpufreq.cpufreq.maxfreq0='1400000'
+uci -q set cpufreq.cpufreq.maxfreq0='1300000'
 uci -q commit cpufreq
 
 exit 0
