@@ -203,6 +203,24 @@ make[4]: *** [Makefile:33: ...-squashfs-sysupgrade.itb] Error 1
 修法：两台设备的 `IMAGE/sysupgrade.itb` 与 `KERNEL_INITRAMFS` 直接写**字面** DTB 路径（不经过变量
 查找，作用域问题无从发生），见 [target/linux/airoha/image/an7581.mk](target/linux/airoha/image/an7581.mk)。
 
+### 2026-10-06：同名包被 feed 遮蔽（daed 与主题都中招）
+
+`Build Firmware` 成功后，`Verify plugin integration` 报缺 `CONFIG_PACKAGE_luci-i18n-footstrap-zh-cn=y`。
+把 run#9 的 `build.log` 与镜像 manifest 对照，才看清真正发生的事：
+
+| 观察（build.log / manifest） | 含义 |
+| --- | --- |
+| `make[3] -C feeds/packages/net/daed compile` | 编的是 **feed 里的上游 Go 版 daed**，不是 `PATCH/daed-pkg` 的 rust-daed |
+| manifest `daed - 1.27.0-r1`（我们的打包版本是 `3.1.3`） | 同一事实的另一条独立证据 |
+| `make[3] -C feeds/luci/themes/luci-theme-footstrap compile` | 编的是 **feed 自带的主题**，`package/new/` 那份（含中文 po）从未参与构建 |
+| manifest 有 `luci-theme-footstrap`、无 `luci-i18n-footstrap-zh-cn` | 没有 po → `luci.mk` 不生成中文包 → 种子里的符号被 `make defconfig` 静默丢弃 |
+
+结论：**同名包放进 `package/new/` 会被 `package/feeds/<feed>/` 遮蔽**，本地副本只是摆设。修法是就地替换
+feed 目录（`feeds/packages/net/daed`），或把补丁/翻译直接补进 feed 里的那棵树（主题的 `po/zh_Hans/`）。
+
+顺带记下 LuCI 的命名规则：i18n 包名后缀取自 `luci.mk` 的 `LUCI_LC_ALIAS`（`zh_Hans` → `zh-cn`），
+所以种子要写 `luci-i18n-footstrap-zh-cn`，而 po 目录必须叫 `po/zh_Hans/`；po **文件名**不参与命名。
+
 <a id="build"></a>
 ## 🔧 自行编译
 
