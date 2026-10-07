@@ -15,7 +15,7 @@
 **只维护 XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND）· 基于
 [naoki66/ImmortalWrt-for-Gemtek-brightspeed](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed) 定制
 
-[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [🧩 预装插件](#-预装插件) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译) · [🐞 构建诊断](#-构建期诊断为什么从-2026-09-24-起一直卡在-configure)
+[📦 固件下载](#-固件下载) · [🚀 快速开始](#-快速开始) · [🧩 预装插件](#-预装插件) · [📡 设备与硬件](#-设备与硬件) · [🔧 自行编译](#-自行编译) · [🐞 踩坑记录](#-构建期踩坑记录)
 
 </div>
 
@@ -140,7 +140,7 @@ profile 选中，两种布局**不能互刷**），刷写细节见
 ---
 
 <a id="diagnostics"></a>
-## 🐞 构建期诊断：为什么从 2026-09-24 起一直卡在 Configure
+## 🐞 构建期踩坑记录
 
 
 Actions 日志在本仓库读不到（token 没有 Actions 读取权限），所以 `Apply feed patches` 与
