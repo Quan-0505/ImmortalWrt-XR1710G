@@ -12,6 +12,7 @@
 | [HANDOFF-lan2-10g-fix.md](HANDOFF-lan2-10g-fix.md) | lan2 修复的交接文档（含 UBI 布局刷机注意事项） |
 | [RCA-daed-multicore-saturation.md](RCA-daed-multicore-saturation.md) | daed 单核吃满：网卡中断集中 CPU0 + RPS 设错队列，含修复 |
 | [RCA-lan2-10g-flapping.md](RCA-lan2-10g-flapping.md) | lan2 万兆抖动根因（phy5 的 reset-before-id-read）与修复后实机验证 |
+| [RCA-npu-crypto-capability.md](RCA-npu-crypto-capability.md) | NPU 加解密能力实测：NPU（PPE）无密码学单元、EIP93 有硬件无驱动、CPU 无 AES 扩展，而代理流量全走 ChaCha20 故加密非瓶颈 |
 | [RCA-proxy-1000M-ceiling.md](RCA-proxy-1000M-ceiling.md) | 代理吞吐 ~550 Mbps 上限的算力账本与测量口径速查 |
 | [RCA-proxy-throughput-instability.md](RCA-proxy-throughput-instability.md) | 代理吞吐不稳：内核 netdev_budget 默认为 1，含 A/B 实测 |
 | [airoha-bridge-flowtable-offload.md](airoha-bridge-flowtable-offload.md) | Airoha 透明桥 flowtable 本地适配 |
