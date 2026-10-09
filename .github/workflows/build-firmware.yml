@@ -430,6 +430,106 @@ jobs:
           echo "=== List all files in bin/ ==="
           ls -la bin/ 2>/dev/null || echo "No files found in bin directory"
 
+      - name: Publish custom feed packages
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          # ── 为什么需要这一步（坑4，2026-10-09 实测确证）────────────────────────────
+          # feeds.conf.default 里有 7 个自定义 feed，它们的包会被编进镜像并安装，但
+          #   ① 运行时的 /etc/apk/repositories.d/distfeeds.list 由构建生成，**只含官方 6 条**
+          #      （targets/... 与 base/luci/packages/routing/telephony），自定义 feed 不在其中；
+          #   ② mirrors.vsean.net 上这 7 个 feed 的索引**确实 404**
+          #      （跟随后重定向实测：7/7 皆 404，597 字节错误页；而官方 base 是 302→
+          #        mirrors.pku.edu.cn/immortalwrt/... → 200，117505 字节）。
+          # ⇒ 后果：luci-app-airoha-npu（NPU 的 LuCI 界面，来自 app_airoha）、
+          #   luci-theme-glass 等包一旦损坏或误删，**无法重装，也无法升级**。
+          # ⇒ 修法：把本次构建出的这些 .apk 收集起来、生成 apk 索引、随 release 发布。
+          #   发布后即可在设备上指向它当本地/自建仓库，摆脱对 404 镜像的依赖。
+          # ─────────────────────────────────────────────────────────────────────────
+          ARCH=aarch64_cortex-a53
+          # 自定义 feed 在 bin/packages/<arch>/ 下的目录名。注意 glass 在 feeds.conf.default 里
+          # 用了 --directory=luci-theme-glass，所以出现两种名字，两个都收。
+          CUSTOM_FEEDS="app_airoha pon_drivers pon_userspace easytier glass luci-theme-glass openwrt_bandix luci_app_bandix"
+
+          echo '=== bin/packages 下实际存在的 feed 目录 ==='
+          ls -la "bin/packages/${ARCH}/" 2>/dev/null || echo "(no bin/packages/${ARCH})"
+
+          OUT=dist/custom-feeds
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          total=0
+          for f in $CUSTOM_FEEDS; do
+            src="bin/packages/${ARCH}/${f}"
+            [ -d "$src" ] || continue
+            mkdir -p "$OUT/${f}"
+            # 只收 apk，跳过索引/签名等中间产物
+            find "$src" -maxdepth 1 -type f -name '*.apk' -exec cp -f {} "$OUT/${f}/" \;
+            n=$(find "$OUT/${f}" -maxdepth 1 -type f -name '*.apk' | wc -l)
+            echo "  ${f} -> ${n} apk"
+            total=$((total + n))
+          done
+          echo "custom feed packages collected: ${total}"
+
+          if [ "$total" -eq 0 ]; then
+            # 不算失败：可能本次 seed 没启用任何自定义包。但要显式记下来，
+            # 免得将来「静默没发布」被误当成「已发布」。
+            echo 'WARNING: 没有收集到任何自定义 feed 的 apk —— 坑4 未被修复（发布物为空）'
+            echo "no custom feed packages were built in this run" > "$OUT/README.txt"
+            exit 0
+          fi
+
+          # ── 生成 apk 索引（能生成就生成，不能也不失败）──────────────────────────
+          # apk-tools 在构建容器里通常是 OpenWrt 自己编的 host 工具；找不到就跳过，
+          # 此时产物仍可用 `apk add --allow-untrusted <file>` 直接安装。
+          APK_BIN=""
+          for c in staging_dir/host/bin/apk "$(command -v apk 2>/dev/null || true)"; do
+            [ -n "$c" ] && [ -x "$c" ] && { APK_BIN="$(cd "$(dirname "$c")" && pwd)/$(basename "$c")"; break; }
+          done
+          if [ -n "$APK_BIN" ]; then
+            echo "using apk index tool: $APK_BIN"
+            for d in "$OUT"/*/; do
+              [ -d "$d" ] || continue
+              # 索引写到该 feed 目录内，路径与 apk 的仓库布局一致。
+              # 先把目录转成绝对路径，避免子 shell 里 cd 之后相对路径失效。
+              dabs="$(cd "$d" && pwd)"
+              if ( cd "$dabs" && "$APK_BIN" index -o packages.adb . >/dev/null 2>&1 ); then
+                echo "  index -> ${d}packages.adb"
+              else
+                echo "  index 生成失败（${d}），该目录仍可直接安装 .apk"
+              fi
+            done
+          else
+            echo 'apk index 工具不可用，跳过索引生成（.apk 仍可手动安装）'
+          fi
+
+          # ── 使用说明随包发布 ────────────────────────────────────────────────────
+          cat > "$OUT/README.txt" <<'EOF'
+          XR1710G 自定义 feed 包（构建产物）
+
+          这些包已经编进固件镜像，但上游镜像 mirrors.vsean.net 上对应的 feed 索引
+          全部 404，导致它们无法重装或升级。此压缩包把本次构建出的 .apk 直接带出来。
+
+          安装单个包：
+            scp <pkg>.apk root@<router>:/tmp/
+            ssh root@<router> 'apk add --allow-untrusted /tmp/<pkg>.apk'
+
+          作为本地仓库使用（若有 packages.adb 索引）：
+            # 把整个目录放到设备上，例如 /mnt/usb/custom-feeds
+            echo '/mnt/usb/custom-feeds/<feedname>' >> /etc/apk/repositories.d/customfeeds.list
+            apk update
+
+          注意：--allow-untrusted 是必要的，因为这些包由本仓库自行构建、未用官方密钥签名。
+          EOF
+
+          # 打包
+          mkdir -p dist
+          tar -czf "dist/custom-feeds-${ARCH}.tar.gz" -C dist custom-feeds
+          ls -lh "dist/custom-feeds-${ARCH}.tar.gz"
+          echo '=== 包内清单 ==='
+          find "$OUT" -type f | sort | head -60
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -449,6 +549,7 @@ jobs:
             bin/targets/airoha/an7581/feeds.buildinfo
             bin/targets/airoha/an7581/version.buildinfo
             bin/targets/airoha/an7581/sha256sums
+            dist/custom-feeds-*.tar.gz
           # .config 是隐藏文件：不打开这个开关它不会被上传（上一轮诊断就吃了这个亏）
           include-hidden-files: true
           retention-days: 30
@@ -482,8 +583,11 @@ jobs:
           body: ${{ steps.release_body.outputs.body }}
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
-          # release 里只放镜像；buildinfo 与 sha256sums 随 Actions 产物提供
+          # release 放：镜像 + 自定义 feed 包（后者是坑4 的修复产物，
+          # 上游 mirrors.vsean.net 上对应的 feed 索引 404，只能由本 release 提供）；
+          # buildinfo 与 sha256sums 随 Actions 产物提供
           files: |
             bin/targets/airoha/an7581/*.itb
+            dist/custom-feeds-*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
