@@ -5,7 +5,6 @@
 **ImmortalWrt 25.12 定制固件 · KixDNS + DaedNext · footstrap 默认主题 · GitHub Actions 构建**
 
 [![Build](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/build-firmware.yml?branch=master&label=Build&style=flat-square)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/build-firmware.yml)
-[![Sync](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/sync-upstream.yml?branch=master&label=Sync&style=flat-square)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/sync-upstream.yml)
 [![Upstream](https://img.shields.io/badge/upstream-naoki66%2FImmortalWrt--for--Gemtek--brightspeed-blue?style=flat-square)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)
 [![Target](https://img.shields.io/badge/target-airoha%2Fan7581-0b5?style=flat-square)](target/linux/airoha/an7581)
 [![Kernel](https://img.shields.io/badge/kernel-6.18-orange?style=flat-square)](target/linux/airoha/patches-6.18)
@@ -251,7 +250,7 @@ bash scripts/summarize-build-errors.sh build.log
 
 
 ```
-.github/workflows/     build-firmware.yml（构建+发布）、sync-upstream.yml（跟随上游）
+.github/workflows/     build-firmware.yml（构建+发布）
 1710.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g-ubi（OpenWrt U-Boot UBI 布局）
 1710-factory.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g（原版 U-Boot 分区）
 2010.config            上游遗留（XG2010G），本仓库不构建
@@ -267,7 +266,12 @@ target/linux/airoha/   设备树、内核与无线补丁、子目标内核片段
 | 工作流 | 触发 | 功能 |
 |--------|------|------|
 | [build-firmware.yml](.github/workflows/build-firmware.yml) | 手动 | 装配插件 → 构建（UBI 布局） → 闸门校验 → 上传 Artifacts / 发布 Release |
-| [sync-upstream.yml](.github/workflows/sync-upstream.yml) | 每 3 天 + 手动 | 同步 ImmortalWrt 上游 |
+
+> ℹ️ 上游同步（naoki66）为**手动**操作，不设自动化工作流。原 `sync-upstream.yml`
+> 跟随的是 `immortalwrt/immortalwrt` 而非设备支持仓库 naoki66，且会在成功合并后
+> 无条件 `git push origin master`；上游作者本人该工作流在 2026-09-28 之后连续三次失败
+> （`#58`/`#59`/`#60`），说明这类合并必须人工解决冲突。为避免自动化把 master 推离设备
+> 支持基线，已于 2026-10-09 移除。
 
 Release 约定：Tag 形如 `YYYYMMDD-<short-hash>`，名称含构建日期与短 hash；构建时会通过
 [scripts/set-build-version.sh](scripts/set-build-version.sh) 写入 LuCI 可见的构建日期与 commit。
