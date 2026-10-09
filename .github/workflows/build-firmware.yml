@@ -343,6 +343,93 @@ jobs:
           echo "=== build-failure.log ==="
           cat build-failure.log || true
 
+      # ===================================================================
+      # [DIAG] 临时诊断步骤：定位 CONFIG_NET_AIROHA_NPU 在内核 .config 里缺失的原因。
+      # 背景：合并 naoki66 上游后本步骤失败（master 连续 12 次通过），
+      #       失败信息为 "xr1710g kernel is missing required symbol: CONFIG_NET_AIROHA_NPU=y"。
+      #       仓库内所有 airoha 相关文件已逐字节比对确认一致，故需直接取证内核源码树。
+      # ★ 诊断结束后必须删除本步骤，不得合入 master。
+      # ===================================================================
+      - name: '[DIAG] Kernel NPU symbol forensics'
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          exec > >(tee diag-npu.log) 2>&1
+
+          KBASE=build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581
+
+          echo '########## DIAG 1: 内核版本定义文件 ##########'
+          cat target/linux/generic/kernel-6.18
+          echo
+
+          echo '########## DIAG 2: find 模式能枚举到的全部候选 .config ##########'
+          find $KBASE -path '*/linux-*/.config' -print
+          echo
+
+          echo '########## DIAG 3: find -quit 实际选中的那个（断言用的就是它）##########'
+          KCFG=$(find $KBASE -path '*/linux-*/.config' -print -quit)
+          echo "KCFG=$KCFG"
+          if [ -f "$KCFG" ]; then echo "行数=$(wc -l < "$KCFG")"; else echo '(文件不存在)'; fi
+          echo
+
+          echo '########## DIAG 4: 该 .config 里全部 AIROHA 行 ##########'
+          grep -n 'AIROHA' "$KCFG" 2>&1 || echo '(一行都没有)'
+          echo
+
+          echo '########## DIAG 5: NPU / PCS / PHYLINK / DSA 相关 ##########'
+          grep -nE 'NPU|PCS_|PHYLINK|NET_DSA|WANT_DEV_COREDUMP|REGMAP_MMIO' "$KCFG" 2>&1 || echo '(none)'
+          echo
+
+          echo '########## DIAG 6: 内核源码树（KCFG 的父目录）##########'
+          KSRC=$(dirname "$KCFG")
+          echo "KSRC=$KSRC"
+          ls -la "$KSRC"/.config* 2>&1
+          echo '--- drivers/net/ethernet/airoha/ 目录 ---'
+          ls -la "$KSRC/drivers/net/ethernet/airoha/" 2>&1
+          echo '--- 该目录 Kconfig 全文 ---'
+          cat "$KSRC/drivers/net/ethernet/airoha/Kconfig" 2>&1
+          echo '--- 该目录 Makefile 全文 ---'
+          cat "$KSRC/drivers/net/ethernet/airoha/Makefile" 2>&1
+          echo '--- Kconfig sha256 ---'
+          sha256sum "$KSRC/drivers/net/ethernet/airoha/Kconfig" 2>&1
+          echo '--- Kconfig 里 NET_AIROHA_NPU 命中数（0=符号真的不在）---'
+          grep -c 'NET_AIROHA_NPU' "$KSRC/drivers/net/ethernet/airoha/Kconfig" 2>&1
+          echo
+
+          echo '########## DIAG 7: 源码树里所有提到 NET_AIROHA_NPU 的文件 ##########'
+          grep -rln 'NET_AIROHA_NPU' "$KSRC/drivers/" 2>&1 | head -20
+          echo
+
+          echo '########## DIAG 8: OpenWrt .config 里的 airoha target / profile ##########'
+          grep -nE 'TARGET_airoha_an7581|DEVICE_gemtek|TARGET_PROFILE|CONFIG_TARGET_MULTI_PROFILE' .config 2>&1 | head -40
+          echo
+
+          echo '########## DIAG 9: OpenWrt .config 是不是真的进了内核 config ##########'
+          echo '--- .config.set（合并后待写入内核的版本）AIROHA 行 ---'
+          grep -n 'AIROHA' "$KSRC/.config.set" 2>&1 || echo '(.config.set 不存在或无命中)'
+          echo '--- .config.old AIROHA 行 ---'
+          grep -n 'AIROHA' "$KSRC/.config.old" 2>&1 || echo '(.config.old 不存在或无命中)'
+          echo '--- .config.target AIROHA 行 ---'
+          grep -n 'AIROHA' "$KSRC/.config.target" 2>&1 || echo '(.config.target 不存在或无命中)'
+          echo '--- .config.prev AIROHA 行 ---'
+          grep -n 'AIROHA' "$KSRC/.config.prev" 2>&1 || echo '(.config.prev 不存在或无命中)'
+          echo
+
+          echo '########## DIAG 10: build_dir 结构 ##########'
+          ls -la $KBASE/ 2>&1 | head -30
+          echo
+
+          echo '########## DIAG 11: 目标配置片段里的 NPU 行（仓库侧）##########'
+          grep -n 'NET_AIROHA' target/linux/airoha/an7581/config-6.18 2>&1
+          echo
+
+          echo '########## DIAG 12: 断言实际执行前的判决依据 ##########'
+          MANIFEST=$(find bin/targets/airoha/an7581 -maxdepth 1 -type f -name '*manifest' -print -quit)
+          echo "MANIFEST=$MANIFEST"
+          echo "kernel_config(inline)=$(find $KBASE -path '*/linux-*/.config' -print -quit)"
+          echo '########## DIAG END ##########'
+
       - name: Verify device isolation
         shell: bash
         run: |
@@ -544,6 +631,7 @@ jobs:
             configure.log
             defconfig-control.log
             plugin-check.log
+            diag-npu.log
             .config
             bin/targets/airoha/an7581/*.itb
             bin/targets/airoha/an7581/*manifest
