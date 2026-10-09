@@ -110,7 +110,7 @@ define Device/gemtek_w1700k-ubi
        the end of flash. A reinstall including corrected chainloader is needed.
   DEVICE_PACKAGES := airoha-en7581-mt7996-npu-firmware airoha-an7581-mt7996-board fitblk \
 		    kmod-hwmon-nct7802 kmod-mt7996-firmware wpad-openssl \
-		    rtl826x-firmware
+		    rtl826x-firmware rtl8261c-firmware
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
   PAGESIZE := 2048
@@ -239,29 +239,31 @@ define Device/gemtek_xr1710g-common
 endef
 
 define Device/gemtek_xr1710g
+  # DEVICE_DTS must be set before the common block: the common IMAGE/KERNEL
+  # lines use := and freeze $(firstword $(DEVICE_DTS)) at eval time.
+  DEVICE_DTS := an7581-xr1710g
   $(call Device/gemtek_xr1710g-common)
   DEVICE_ALT0_VENDOR := Brightspeed
   DEVICE_ALT0_MODEL := XR1710G
   SUPPORTED_DEVICES := gemtek,xr1710g
-  DEVICE_DTS := an7581-xr1710g
-  # FIT 阶段用的 DTB 路径写成字面量：镜像配方展开时 DEVICE_DTS 会退回
-  # Device/Default 的 $$(SOC)-$$(lastword ...)（SOC 为空 → "-xr1710g-ubi"），
-  # mkits.sh 因此找不到已编译好的 DTB。字面量不经过变量查找，绕开该作用域问题。
+  # 本仓库额外保险（上游用「前置 DEVICE_DTS」修同一问题）：FIT 阶段的 DTB 路径写
+  # 字面量。镜像配方展开时 DEVICE_DTS 可能退回 Device/Default 的空值（实测 SOC 未
+  # 定义 → "-xr1710g-ubi"），mkits.sh 因此找不到已编译好的 DTB。下面两行位于 common
+  # 之后，以 := 覆盖 common 里的同名配方 —— 这是当前设备上已验证可启动的写法，
+  # 与上游的 DEVICE_DTS 前置改动并存。
   IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-an7581-xr1710g.dtb external-static-with-rootfs | append-metadata
   KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-an7581-xr1710g.dtb with-initrd | pad-to 128k
 endef
 TARGET_DEVICES += gemtek_xr1710g
 
 define Device/gemtek_xr1710g-ubi
+  DEVICE_DTS := an7581-gemtek-xr1710g-ubi
   $(call Device/gemtek_xr1710g-common)
   DEVICE_MODEL := XR1710G (OpenWrt U-Boot UBI layout)
   DEVICE_ALT0_VENDOR := Brightspeed
   DEVICE_ALT0_MODEL := XR1710G (OpenWrt U-Boot UBI layout)
   SUPPORTED_DEVICES := gemtek,xr1710g-ubi
-  DEVICE_DTS := an7581-gemtek-xr1710g-ubi
-  # FIT 阶段用的 DTB 路径写成字面量：镜像配方展开时 DEVICE_DTS 会退回
-  # Device/Default 的 $$(SOC)-$$(lastword ...)（SOC 为空 → "-xr1710g-ubi"），
-  # mkits.sh 因此找不到已编译好的 DTB。字面量不经过变量查找，绕开该作用域问题。
+  # 同上：字面量 DTB 路径，覆盖 common 里的 $$(firstword $$(DEVICE_DTS)) 版本。
   IMAGE/sysupgrade.itb := append-kernel | fit gzip $$(KDIR)/image-an7581-gemtek-xr1710g-ubi.dtb external-static-with-rootfs | append-metadata
   KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-an7581-gemtek-xr1710g-ubi.dtb with-initrd | pad-to 128k
   DEVICE_COMPAT_VERSION := 2.0
@@ -272,11 +274,8 @@ define Device/gemtek_xr1710g-ubi
 endef
 TARGET_DEVICES += gemtek_xr1710g-ubi
 
-define Device/gemtek_xg2010g-ubi
+define Device/gemtek_xg2010g-common
   DEVICE_VENDOR := Gemtek
-  DEVICE_MODEL := XG2010G
-  DEVICE_VARIANT := UBI
-  DEVICE_DTS := an7581-gemtek-xg2010g-ubi
   DEVICE_COMPAT_VERSION := 2.0
   DEVICE_COMPAT_MESSAGE := Firmware requires the XG2010G OpenWrt U-Boot UBI layout \
        with bl2 at 0x00000000 and ubi starting at 0x00020000, containing \
@@ -302,10 +301,28 @@ define Device/gemtek_xg2010g-ubi
   IMAGE/sysupgrade.itb := append-kernel | \
 	fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | \
 	append-metadata | check-size
-  SUPPORTED_DEVICES := gemtek,xg2010g-ubi gemtek,xg2010g
   SOC := an7581
 endef
+
+define Device/gemtek_xg2010g-ubi
+  # DEVICE_DTS must be set before the common block: the common IMAGE line
+  # uses := and freezes $(firstword $(DEVICE_DTS)) at eval time.
+  DEVICE_DTS := an7581-gemtek-xg2010g-ubi
+  $(call Device/gemtek_xg2010g-common)
+  DEVICE_MODEL := XG2010G
+  DEVICE_VARIANT := UBI
+  SUPPORTED_DEVICES := gemtek,xg2010g-ubi gemtek,xg2010g
+endef
 TARGET_DEVICES += gemtek_xg2010g-ubi
+
+define Device/gemtek_xg2010g-2g-ubi
+  DEVICE_DTS := an7581-gemtek-xg2010g-2g-ubi
+  $(call Device/gemtek_xg2010g-common)
+  DEVICE_MODEL := XG2010G (2 GiB)
+  DEVICE_VARIANT := UBI
+  SUPPORTED_DEVICES := gemtek,xg2010g-2g-ubi gemtek,xg2010g-2g
+endef
+TARGET_DEVICES += gemtek_xg2010g-2g-ubi
 
 define Device/quantum_q1000k-ubi
   DEVICE_VENDOR := Quantum Fiber
