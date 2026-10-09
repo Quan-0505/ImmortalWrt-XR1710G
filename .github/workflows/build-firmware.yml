@@ -561,18 +561,80 @@ jobs:
         env:
           RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
         run: |
+          # ------------------------------------------------------------------
+          # 描述正文由 workflow 自身生成。理由是实测出来的：
+          #
+          #   * workflow 文件里的中文是可靠载体 —— release 20261009-3ee3b308
+          #     里固定的「感谢」行 21 个中文字符完好无损。
+          #   * 而 release_notes 这个 workflow_dispatch 输入参数会在派发环节
+          #     被有损转换成 ASCII：同一批 21 个中文字符到达 runner 时变成
+          #     恰好 21 个 '?'，且【不可恢复】。该参数从未有过成功先例。
+          #
+          # 所以正文的承重内容（镜像怎么选、刷写注意）不能放在输入参数里，
+          # 它只作为可选补充，并在此做损坏检测。
+          # ------------------------------------------------------------------
+          NOTES="$RELEASE_NOTES"
+          if [ -n "$NOTES" ]; then
+            NONASCII=$(printf '%s' "$NOTES" | LC_ALL=C tr -d '\000-\177' | wc -c | tr -d ' ')
+            QRUNS=$(printf '%s' "$NOTES" | grep -o '??*' | wc -l | tr -d ' ')
+            if [ "$NONASCII" -eq 0 ] && [ "$QRUNS" -gt 0 ]; then
+              echo "::warning title=release_notes 疑似编码损坏::输入里没有任何非 ASCII 字符却有 ${QRUNS} 处连续 '?'，判定为派发环节的有损转换，已忽略该输入。"
+              NOTES=""
+            else
+              echo "release_notes: 采用（非 ASCII ${NONASCII} 个）。"
+            fi
+          fi
+
+          BODY=/tmp/release_body.md
+
+          cat > "$BODY" <<'RELEASE_BODY_EOF'
+          ## Gemtek / Brightspeed XR1710G 定制固件（ImmortalWrt 25.12）
+
+          ### 镜像二选一 —— 按分区表选，不要按文件名猜
+
+          | 文件名 | 适用布局 |
+          |---|---|
+          | `immortalwrt-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb` | 原厂 U-Boot 分区布局 |
+          | `immortalwrt-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb` | OpenWrt U-Boot UBI 布局（需先刷 OpenWrt U-Boot） |
+
+          > ⚠️ **两种布局不能互刷。** 名字带 `-ubi-` 的看起来「更像本机」（board 名确实是 `gemtek_xr1710g-ubi`），但它描述的是整片 flash 做 UBI 的布局，与原厂 chainloader 分区不兼容 —— **这是陷阱，按分区表判断**。
+
+          ### 刷写注意
+
+          - 在 LuCI「系统 → 备份/升级」直接刷对应的 `.itb`；`sysupgrade` **默认保留配置**，放弃配置才用 `-n`。
+          - 无线校准数据与 MAC 位于原厂 `factory` / `dsd` 分区，重建 UBI 前先完整备份并按文档回写。
+          - ⚠️ **备份范围 = `/lib/upgrade/keep.d/*` + `/etc/sysupgrade.conf`，此外一律不保留。** 升级前逐项确认要害路径已登记（例如 `/etc/daed/`、`/etc/kixdns/`、`/etc/hotplug.d/`）。
+
+          ### 自定义 feed
+
+          `custom-feeds-aarch64_cortex-a53.tar.gz` 提供本仓库自定义 feed 的 apk 包。上游 `mirrors.vsean.net` 上对应索引 404，自建包只能由本 release 提供。
+
+          ### 校验
+
+          镜像 sha256、`.config`、`config.buildinfo` / `feeds.buildinfo` / `sha256sums` 见同次 Actions 运行的 Artifacts。
+          RELEASE_BODY_EOF
+
+          if [ -n "$NOTES" ]; then
+            {
+              echo ""
+              echo "### 本次构建备注"
+              echo ""
+              printf '%s\n' "$NOTES"
+            } >> "$BODY"
+          fi
+
           {
-            printf '%s\n' "$RELEASE_NOTES"
             echo ""
             echo "---"
             echo ""
-            echo "感谢 @naoki66 的设备移植与补丁，以及 ImmortalWrt / OpenWrt 上游社区的工作。"
-          } > /tmp/release_body.md
+            echo "感谢 [@naoki66](https://github.com/naoki66) 的设备移植与补丁，以及 ImmortalWrt / OpenWrt 上游社区的工作。"
+          } >> "$BODY"
+
           {
-            echo "body<<EOF"
-            cat /tmp/release_body.md
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+            echo "body<<RELEASE_BODY_DELIM"
+            cat "$BODY"
+            echo "RELEASE_BODY_DELIM"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create Release
         if: github.event.inputs.release_type != 'none'
