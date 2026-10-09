@@ -44,13 +44,27 @@
   `NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`，并关闭 `DEBUG_INFO_REDUCED`，生成完整 BTF
   （daed 的 eBPF/CO-RE 依赖它）。
 - **设备范围**：仅 XR1710G，profile = `DEVICE_gemtek_xr1710g-ubi`（UBI 布局）。
-- **新增目录**：[`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/daed-web`](PATCH/daed-web)
-  （daed WebUI 覆盖层）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)（主题中文翻译）。
+- **新增目录**：[`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)
+  （主题中文翻译）。仓库里还留着 [`PATCH/daed-web`](PATCH/daed-web)（旧版 daed WebUI 覆盖层），但它**已不再参与构建** ——
+  原因见下方「最近变更」。
 - **主题**：LuCI 默认开机主题为 **footstrap**（含简体中文包），由
   `target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh` 在首次开机时设定。
 - **保留项**：设备与系统类 LuCI 应用（`luci-app-airoha-*`、`mesh-conf`、`netmode`、`upnp`、`firewall`、
   `arpbind`、`mlo`、`package-manager`、`autoreboot`）、系统工具类应用（`ttyd`/`usteer`/`watchcat`/`wol`/
   `ddns`/`wifihistory`/`wifischedule`）、三个主题与中文语言包。
+
+### 最近变更（2026-10）
+
+- **lan2 万兆口不再抖动**：删掉两份 DTS 里 `phy5`（= lan2）节点上的 `reset-before-id-read;`
+  （[`an7581-xr1710g.dts`](target/linux/airoha/dts/an7581-xr1710g.dts) 第 363 行、
+  [`an7581-gemtek-xr1710g-ubi.dts`](target/linux/airoha/dts/an7581-gemtek-xr1710g-ubi.dts) 第 389 行）。
+  该属性会让 PHY 在读 ID 前多打一次 400 ms 硬复位，而 Realtek 补丁作者已写明「表尾再叠一次复位会清掉固件写入的
+  SerDes SDS 位」—— 结果就是铜口显示 up、AN7581 侧收不到 USXGMII 对端字，表现为链路反复掉线。
+  **两份都要改**：设备实际刷的是 `-ubi` 布局镜像，只改原版分区那份等于没改。
+- **不再超频**：去掉 `airoha,force-direct-pll` 与 1.35 / 1.4 GHz 两档 OPP，CPU 上限回到原厂 **1.3 GHz**。
+- **daed WebUI 改用载荷自带的那份**：仓库里那份 `PATCH/daed-web` 是初次提交时的旧前端（576 个文件），
+  会把 rust-daed v3.1.3 载荷自带的 UI（103 个文件）整体遮蔽、界面版本号停在旧 UI 的 `v3.1.0`；
+  现已不再覆盖，**内核与 UI 同源**，镜像体积也小了约 8 MB。
 
 ---
 
@@ -109,7 +123,7 @@ CI 会分别构建**两种闪存布局**，按当前布局选对应文件（两�
 | 步骤 | 作用 |
 |------|------|
 | `Prepare kixdns and daed packages` | 拉取 kixdns 源码与 daed 包定义到 `package/new/`，并把 BTF/BPF/veth/clsact 写进 airoha 子目标的内核片段（`target/linux/airoha/*/config-6.*`） |
-| `Fetch plugin prebuilt payloads (kixdns + daed)` | 下载两个插件的预编译载荷并解包到 `package/new/*/prebuilt*/`，并把 `PATCH/daed-web` 覆盖到 daed WebUI 目录 |
+| `Fetch plugin prebuilt payloads (kixdns + daed)` | 下载两个插件的预编译载荷并解包到 `package/new/*/prebuilt*/`；daed 的 WebUI **直接用载荷自带的那份**（不再叠加仓库里的旧覆盖层） |
 | `Prepare footstrap theme (LuCI)` | 按 pin 拉取 footstrap 主题源码放进 `package/new/`，并带上自译中文 po（生成 `luci-i18n-footstrap-zh-cn`） |
 | `Verify plugin integration (kixdns + daed)` | **构建后闸门**：校验 `.config` 插件与主题开关、内核 `.config` 里的 BTF/BPF/veth/clsact、产物中的插件包与镜像文件、以及**镜像 manifest 里确实有 footstrap 主题**；任一项缺失即判定失败，避免产出「插件/主题没装上」的固件 |
 
@@ -242,7 +256,7 @@ bash scripts/summarize-build-errors.sh build.log
 1710-factory.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g（原版 U-Boot 分区）
 2010.config            上游遗留（XG2010G），本仓库不构建
 PATCH/daed-pkg/daed/   daed 包定义（版本、安装规则、prebuilt-data 装载）
-PATCH/daed-web/        daed WebUI 覆盖层（构建时覆盖到 usr/share/daed/web）
+PATCH/daed-web/        daed WebUI 旧覆盖层（已停用，不再参与构建；保留仅为可追溯）
 scripts/               构建辅助：apply-feed-patches.sh、check-firmware-artifacts.sh、
                        check-gemtek-profile-isolation.sh、set-build-version.sh 等
 target/linux/airoha/   设备树、内核与无线补丁、子目标内核片段（an7581）
