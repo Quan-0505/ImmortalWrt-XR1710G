@@ -6,6 +6,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| [CI-verification-20261010.md](CI-verification-20261010.md) | 6.18.54 同步、CI 配置定位修复、run#24 产物验证与正式双布局发布要求 |
 | [FIX-lan2-10g-reset-before-id-read.patch](FIX-lan2-10g-reset-before-id-read.patch) | lan2 修复的一行补丁（可 git apply） |
 | [FLASH-GUIDE-20261009.md](FLASH-GUIDE-20261009.md) | 刷机指南（release 20261009-bcdc0b3e）：选文件、校验、试运行、刷后判据 |
 | [GITHUB-UPDATE.md](GITHUB-UPDATE.md) | 项目长期 brief：缺陷清单、优先级、验证方法与当前设备状态 |

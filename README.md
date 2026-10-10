@@ -54,6 +54,12 @@
 
 ### 最近变更（2026-10）
 
+- **同步上游内核 6.18.54**：保留现有 lan2、CPU 频率、daed 与主题修复；CI 定位内核
+  `.config` 时限制搜索深度并核对目录类型，避免误选 mac80211 backports 配置。
+  run#24 的 UBI 产物已经通过 SHA256、FIT/DTB 与 manifest 核验，详见
+  [验证记录](docs/CI-verification-20261010.md)。
+- **发布前校验镜像**：每个 ITB 必须有唯一 checksum 记录并通过 SHA256 校验；两种布局
+  分别构建，同一 release 只补缺失资产，tag 指向实际构建提交。
 - **lan2 万兆口不再抖动**：删掉两份 DTS 里 `phy5`（= lan2）节点上的 `reset-before-id-read;`
   （[`an7581-xr1710g.dts`](target/linux/airoha/dts/an7581-xr1710g.dts) 第 363 行、
   [`an7581-gemtek-xr1710g-ubi.dts`](target/linux/airoha/dts/an7581-gemtek-xr1710g-ubi.dts) 第 389 行）。

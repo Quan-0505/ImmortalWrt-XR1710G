@@ -25,6 +25,10 @@ on:
       release_notes:
         description: 'Release Notes'
         required: false
+      build_date:
+        description: 'Shared build date for coordinated layouts (YYYYMMDD; blank uses current date)'
+        required: false
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -34,6 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      date: ${{ steps.version.outputs.date }}
+      repo_commit: ${{ steps.version.outputs.repo_commit }}
+      device_model: ${{ steps.version.outputs.device_model }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -42,12 +50,18 @@ jobs:
 
       - name: Generate build version
         id: version
+        env:
+          REQUESTED_BUILD_DATE: ${{ inputs.build_date }}
         run: |
           git remote add upstream https://github.com/immortalwrt/immortalwrt.git 2>/dev/null || true
           git remote set-url upstream https://github.com/immortalwrt/immortalwrt.git
           git fetch --no-tags upstream master
 
           build_date=$(TZ=Asia/Shanghai date +'%Y%m%d')
+          if [ -n "$REQUESTED_BUILD_DATE" ]; then
+            [[ "$REQUESTED_BUILD_DATE" =~ ^[0-9]{8}$ ]] || { echo 'build_date must be YYYYMMDD' >&2; exit 1; }
+            build_date=$(TZ=Asia/Shanghai date -d "$REQUESTED_BUILD_DATE" +'%Y%m%d')
+          fi
           repo_commit=$(git rev-parse --short=8 HEAD)
           upstream_base=$(git merge-base HEAD upstream/master)
           upstream_commit=$(git rev-parse --short=8 "$upstream_base")
@@ -554,6 +568,25 @@ jobs:
           echo '=== 包内清单 ==='
           find "$OUT" -type f | sort | head -60
 
+      - name: Verify image checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd bin/targets/airoha/an7581
+          test -s sha256sums
+          for image in *.itb; do
+            test -s "$image"
+            # Each image must have exactly one checksum entry before publication.
+            awk -v image="$image" '
+              $2 == image || $2 == "*" image { print; hits++ }
+              END {
+                printf "checked_file=sha256sums image=%s hit_set_size=%d\n", image, hits > "/dev/stderr"
+                if (hits != 1) exit 1
+              }
+            ' sha256sums > "/tmp/${image}.sha256"
+            sha256sum --check "/tmp/${image}.sha256"
+          done
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -578,6 +611,46 @@ jobs:
           include-hidden-files: true
           retention-days: 30
         if: always()
+
+  release:
+    needs: build
+    if: inputs.release_type != 'none'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Both layouts may build in parallel, but release updates must not race.
+    concurrency:
+      group: gemtek-release-${{ github.repository }}-${{ needs.build.outputs.date }}-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download verified firmware
+        uses: actions/download-artifact@v8
+        with:
+          name: gemtek-${{ inputs.config_seed }}-firmware
+
+      - name: Verify downloaded image checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd bin/targets/airoha/an7581
+          test -s sha256sums
+          for image in *.itb; do
+            test -s "$image"
+            awk -v image="$image" '
+              $2 == image || $2 == "*" image { print; hits++ }
+              END {
+                printf "checked_file=sha256sums image=%s hit_set_size=%d\n", image, hits > "/dev/stderr"
+                if (hits != 1) exit 1
+              }
+            ' sha256sums > "/tmp/${image}.sha256"
+            sha256sum --check "/tmp/${image}.sha256"
+          done
 
       - name: Build release body
         if: github.event.inputs.release_type != 'none'
@@ -638,6 +711,13 @@ jobs:
           镜像 sha256、`.config`、`config.buildinfo` / `feeds.buildinfo` / `sha256sums` 见同次 Actions 运行的 Artifacts。
           RELEASE_BODY_EOF
 
+          {
+            echo ""
+            echo "### 本版提交"
+            echo ""
+            git log --first-parent -6 --format='- %s (`%h`)' HEAD
+          } >> "$BODY"
+
           if [ -n "$NOTES" ]; then
             {
               echo ""
@@ -664,11 +744,14 @@ jobs:
         if: github.event.inputs.release_type != 'none'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ format('{0}-{1}', steps.version.outputs.date, steps.version.outputs.repo_commit) }}
-          name: ${{ format('{0} - Gemtek {1} Build ({2})', steps.version.outputs.date, steps.version.outputs.device_model, steps.version.outputs.repo_commit) }}
+          tag_name: ${{ format('{0}-{1}', needs.build.outputs.date, needs.build.outputs.repo_commit) }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ format('{0} - Gemtek {1} Build ({2})', needs.build.outputs.date, needs.build.outputs.device_model, needs.build.outputs.repo_commit) }}
           body: ${{ steps.release_body.outputs.body }}
           draft: false
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+          overwrite_files: false
+          fail_on_unmatched_files: true
           # release 放：镜像 + 自定义 feed 包（后者是坑4 的修复产物，
           # 上游 mirrors.vsean.net 上对应的 feed 索引 404，只能由本 release 提供）；
           # buildinfo 与 sha256sums 随 Actions 产物提供
