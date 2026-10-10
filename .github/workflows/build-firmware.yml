@@ -349,10 +349,24 @@ jobs:
           bash scripts/check-firmware-artifacts.sh \
             --config .config \
             --directory bin/targets/airoha/an7581
-          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 -path '*/linux-*/.config' -print -quit)
+          # ★ 必须加 -maxdepth 2。'*/linux-*/.config' 里的 * 可以跨越目录分隔符，于是
+          #   linux-* 匹配的是 $KBASE 自身的目录名 linux-airoha_an7581，后面的 * 再吞掉
+          #   任意层子目录 —— build_dir/.../linux-airoha_an7581/mac80211-regular/
+          #   backports-7.2/.config 同样命中。find 的遍历顺序由文件系统决定（实测同一模式
+          #   在 CI 上选中 backports、在本地 NTFS 上选中内核），一旦 backports 目录排在
+          #   linux-x.y.z 前面，-quit 就停在那份无关的 mac80211 配置上，断言随之变成
+          #   "检查一份永远不含 CONFIG_NET_AIROHA_NPU 的文件"而误报失败。
+          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 \
+            -maxdepth 2 -path '*/linux-*/.config' -print -quit)
           manifest=$(find bin/targets/airoha/an7581 -maxdepth 1 -type f -name '*manifest' -print -quit)
           test -n "$kernel_config"
           test -n "$manifest"
+          # 确保选中的确实是内核源码树里的 .config。没有这道闸，选错文件只会静默地把断言
+          # 指向错误对象（可能误报失败，也可能在本该失败时误报通过）。
+          case "$kernel_config" in
+            */linux-[0-9]*/.config) ;;
+            *) echo "kernel_config 不是内核源码树里的 .config：$kernel_config" >&2; exit 1 ;;
+          esac
           bash scripts/check-gemtek-profile-isolation.sh \
             --config .config \
             --kernel-config "$kernel_config" \
@@ -372,8 +386,16 @@ jobs:
           done
           grep -E '^CONFIG_PACKAGE_(daed|kixdns|kixdns-stats|luci-app-kixdns|ip-full)=y$' .config
           echo '=== 内核 BTF/BPF/veth/clsact（daed 运行前提）==='
-          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 -path '*/linux-*/.config' -print -quit)
+          # 同 Verify device isolation：必须 -maxdepth 2，否则可能选中 mac80211 backports
+          # 那份 .config（它由 CPTCFG_ 前缀符号构成，必然缺 CONFIG_DEBUG_INFO_BTF 等）。
+          kernel_config=$(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 \
+            -maxdepth 2 -path '*/linux-*/.config' -print -quit)
           test -n "$kernel_config"
+          case "$kernel_config" in
+            */linux-[0-9]*/.config) ;;
+            *) echo "kernel_config 不是内核源码树里的 .config：$kernel_config" >&2; exit 1 ;;
+          esac
+          echo "kernel_config=$kernel_config"
           for sym in CONFIG_DEBUG_INFO_BTF CONFIG_BPF_SYSCALL CONFIG_VETH CONFIG_NET_CLS_ACT CONFIG_NET_CLS_BPF CONFIG_NET_SCH_INGRESS; do
             grep -Eq "^${sym}=y$" "$kernel_config" || { echo "kernel is missing ${sym}=y" >&2; exit 1; }
             grep -E "^${sym}=y$" "$kernel_config"
