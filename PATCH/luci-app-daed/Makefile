@@ -7,3 +7,5 @@ PKG_RELEASE:=1
 PKG_LICENSE:=MIT
 
 include $(TOPDIR)/feeds/luci/luci.mk
+
+# call BuildPackage - OpenWrt buildroot signature

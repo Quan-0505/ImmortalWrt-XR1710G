@@ -127,6 +127,7 @@ jobs:
           cp -rf PATCH/daed-pkg/daed feeds/packages/net/daed
           cp -rf PATCH/luci-app-daed feeds/luci/applications/luci-app-daed
           ./scripts/feeds update -i luci
+          grep -Eq '^Package:[[:space:]]+luci-app-daed$' feeds/luci.index
           ./scripts/feeds install -f -p luci luci-app-daed
           python3 - <<'PYEOF'
           import glob
@@ -236,6 +237,8 @@ jobs:
               VERSION_CODE='${{ steps.version.outputs.version_code }}' \
               bash scripts/set-build-version.sh .config &&
             run_step 'make defconfig' make defconfig &&
+            run_step 'Netkit seed survives defconfig' grep -Fqx 'CONFIG_KERNEL_NETKIT=y' .config &&
+            run_step 'LuCI daed entry survives defconfig' bash -c 'case "$1" in 1710.config|1710-factory.config) grep -Fqx "CONFIG_PACKAGE_luci-app-daed=y" .config ;; esac' -- '${{ inputs.config_seed }}' &&
             run_step 'gemtek profile isolation' bash scripts/check-gemtek-profile-isolation.sh --config .config &&
             run_step 'version symbols' grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
           } > configure.log 2>&1
