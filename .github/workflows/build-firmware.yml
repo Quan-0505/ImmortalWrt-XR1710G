@@ -209,6 +209,13 @@ jobs:
           rm -rf "$theme_dir/po/zh_Hans"
           mkdir -p "$theme_dir/po/zh_Hans"
           cp -f PATCH/theme-footstrap-zh/zh_Hans/footstrap.po "$theme_dir/po/zh_Hans/footstrap.po"
+          # po/ additions do not invalidate cached Makefile package metadata.
+          # Refresh both feed and buildroot indexes before defconfig selects i18n.
+          touch "$theme_dir/Makefile"
+          ./scripts/feeds update -i luci
+          grep -Eq '^Package:[[:space:]]+luci-i18n-footstrap-zh-cn$' feeds/luci.index
+          ./scripts/feeds install -f -p luci luci-theme-footstrap
+          rm -f tmp/info/.packageinfo-feeds_luci_luci-theme-footstrap tmp/.packageinfo
           ls -la "$theme_dir" | head -20
           ls -la "$theme_dir/po/zh_Hans"
 
@@ -239,6 +246,7 @@ jobs:
             run_step 'make defconfig' make defconfig &&
             run_step 'Netkit seed survives defconfig' grep -Fqx 'CONFIG_KERNEL_NETKIT=y' .config &&
             run_step 'LuCI daed entry survives defconfig' bash -c 'case "$1" in 1710.config|1710-factory.config) grep -Fqx "CONFIG_PACKAGE_luci-app-daed=y" .config ;; esac' -- '${{ inputs.config_seed }}' &&
+            run_step 'Footstrap Chinese package survives defconfig' grep -Fqx 'CONFIG_PACKAGE_luci-i18n-footstrap-zh-cn=y' .config &&
             run_step 'gemtek profile isolation' bash scripts/check-gemtek-profile-isolation.sh --config .config &&
             run_step 'version symbols' grep -E 'CONFIG_(IMAGEOPT|EXTRA_IMAGE_NAME|VERSIONOPT|VERSION_DIST|VERSION_NUMBER|VERSION_CODE|VERSION_FILENAMES|VERSION_CODE_FILENAMES)[= ]' .config
           } > configure.log 2>&1
