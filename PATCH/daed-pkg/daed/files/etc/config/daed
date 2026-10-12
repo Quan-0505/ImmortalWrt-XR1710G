@@ -1,0 +1,5 @@
+config daed 'main'
+	option enabled '1'
+	option listen '0.0.0.0:2023'
+	option go_config_dir '/etc/daed-kdae'
+	option respawn '1'

@@ -1,0 +1,6 @@
+{
+  "luci-app-daed": {
+    "description": "Read daed management endpoint",
+    "read": { "uci": [ "daed" ] }
+  }
+}

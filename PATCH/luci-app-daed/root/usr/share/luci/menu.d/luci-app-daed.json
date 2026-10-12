@@ -1,0 +1,8 @@
+{
+  "admin/services/daed": {
+    "title": "daed",
+    "order": 60,
+    "action": { "type": "view", "path": "daed/open" },
+    "depends": { "acl": [ "luci-app-daed" ] }
+  }
+}

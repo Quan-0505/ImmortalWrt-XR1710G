@@ -2,7 +2,7 @@
 
 # ImmortalWrt for Gemtek / Brightspeed XR1710G
 
-**ImmortalWrt 25.12 定制固件 · KixDNS + DaedNext · footstrap 默认主题 · GitHub Actions 构建**
+**ImmortalWrt 25.12 定制固件 · KixDNS + Go KDAE · footstrap 默认主题 · GitHub Actions 构建**
 
 [![Build](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/build-firmware.yml?branch=master&label=Build&style=flat-square)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/build-firmware.yml)
 [![Upstream](https://img.shields.io/badge/upstream-naoki66%2FImmortalWrt--for--Gemtek--brightspeed-blue?style=flat-square)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)
@@ -24,35 +24,35 @@
 面向 **Gemtek / Brightspeed XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND / Wi-Fi 7 MT7996AV）
 的 ImmortalWrt 25.12 固件，由 GitHub Actions 构建与发布。
 
-- **预装两个插件**：`kixdns`（含统计与 LuCI 应用）与 `daed`（DaedNext，rust-daed v3.1.3，内嵌 UI）；
+- **预装两个插件**：`kixdns`（含统计与 LuCI 应用）与 `daed`（Go KDAE v2.2.4，新管理界面内嵌）；
 - **默认管理地址 `192.168.2.1`**（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）；
-- **补齐 daed 的 eBPF 内核前提**（BTF / BPF / veth / clsact），并裁掉用不到的第三方插件；
-- **只构建 XR1710G**：CI 的 profile 是 `DEVICE_gemtek_xr1710g-ubi`（`config.buildinfo` 可证：
-  `CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi=y`），即 **OpenWrt U-Boot UBI 布局**
-  那一套镜像；源码树里另有原厂 U-Boot 布局的设备定义（`gemtek_xr1710g`），需要时切过去自行构建。
+- **补齐 daed 的 eBPF 内核前提**（BTF / BPF / veth / clsact / Netkit），并裁掉用不到的第三方插件；
+- **两套 XR1710G 布局**：`1710.config` 构建 UBI 镜像，`1710-factory.config` 构建原厂分区镜像。两套镜像不能互刷。
 
 ---
 
 <a id="diff"></a>
 ## 🧭 本仓库做了什么
 
-- **预装插件**：`kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`（rust-daed 3.1.3，内嵌 UI）；
+- **预装插件**：`kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`（Go KDAE 2.2.4，新管理界面内嵌）；
   其余第三方插件一律关闭。
 - **默认管理地址**：`192.168.2.1`（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）。
 - **内核**：开启 `DEBUG_INFO_BTF`、`BPF`、`BPF_SYSCALL`、`BPF_JIT(_ALWAYS_ON)`、`VETH`、
-  `NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`，并关闭 `DEBUG_INFO_REDUCED`，生成完整 BTF
+  `NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`、`NETKIT`，并关闭 `DEBUG_INFO_REDUCED`，生成完整 BTF
   （daed 的 eBPF/CO-RE 依赖它）。
-- **设备范围**：仅 XR1710G，profile = `DEVICE_gemtek_xr1710g-ubi`（UBI 布局）。
+- **设备范围**：XR1710G，支持 `gemtek_xr1710g-ubi`（UBI）与 `gemtek_xr1710g`（原厂分区）两种配置。
 - **新增目录**：[`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)
-  （主题中文翻译）。仓库里还留着 [`PATCH/daed-web`](PATCH/daed-web)（旧版 daed WebUI 覆盖层），但它**已不再参与构建** ——
-  原因见下方「最近变更」。
-- **主题**：LuCI 默认开机主题为 **footstrap**（含简体中文包），由
-  `target/linux/airoha/an7581/base-files/etc/uci-defaults/91-xr1710g-theme.sh` 在首次开机时设定。
-- **保留项**：设备与系统类 LuCI 应用（`luci-app-airoha-*`、`mesh-conf`、`netmode`、`upnp`、`firewall`、
-  `arpbind`、`mlo`、`package-manager`、`autoreboot`）、系统工具类应用（`ttyd`/`usteer`/`watchcat`/`wol`/
-  `ddns`/`wifihistory`/`wifischedule`）、三个主题与中文语言包。
+  （主题中文翻译）。旧版 `PATCH/daed-web` 覆盖层已移除，界面直接来自经过 SHA256 校验的 Go 二进制。
 
-### 最近变更（2026-10）
+## 最近变更（2026-10）
+
+### 2026-10-12：Go KDAE 管理界面与 LuCI 服务入口
+
+- 用 [daed-kdae v2.2.4-kdae](https://github.com/Quan-0505/daed-kdae/releases/tag/v2.2.4-kdae) 的静态 AArch64 程序替换 Rust daed，包含新版首页、日志、每日 Geo 更新、订阅自动重载和群组编辑。
+- 两个 XR1710G 布局都预装 `luci-app-daed`；点击 **服务 → daed** 直接进入面板，自动使用当前地址和 UCI 配置端口，支持 IPv6 和 HTTPS LuCI，无需手填 IP/端口。
+- 归档及二进制固定 SHA256；构建后核对真正装进固件的程序和 LuCI 菜单，避免 feed 遮蔽或重复 strip。补齐 Netkit 内核支持。
+- Go 默认数据目录 `/etc/daed-kdae/`，Rust `/etc/daed/` 保留。两者的数据库不互换，原数据需要备份后离线迁移；见 [Go KDAE 接入与迁移说明](docs/daed-go-kdae.md)。固件不包含设备的订阅、节点或密码。
+
 
 - **同步上游内核 6.18.54**：保留现有 lan2、CPU 频率、daed 与主题修复；CI 定位内核
   `.config` 时限制搜索深度并核对目录类型，避免误选 mac80211 backports 配置。
@@ -244,7 +244,7 @@ bash scripts/summarize-build-errors.sh build.log
 `default-settings-chn`。
 
 **代理与网络核心**：`xray-core`、`simple-obfs-client`、`chinadns-ng`、`geoview`、`dns2socks`、
-`microsocks`、`ipt2socks`。**插件**：`kixdns`(+stats)、`daed`（rust-daed）。
+`microsocks`、`ipt2socks`。**插件**：`kixdns`(+stats)、`daed`（Go KDAE）。
 
 **未收录**：`lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、`rtp2httpd`、
 `wechatpush`、`timewol`（含各自的 LuCI 应用与中文语言包）。
@@ -261,7 +261,7 @@ bash scripts/summarize-build-errors.sh build.log
 1710-factory.config            仅 XR1710G：profile = DEVICE_gemtek_xr1710g（原版 U-Boot 分区）
 2010.config            上游遗留（XG2010G），本仓库不构建
 PATCH/daed-pkg/daed/   daed 包定义（版本、安装规则、prebuilt-data 装载）
-PATCH/daed-web/        daed WebUI 旧覆盖层（已停用，不再参与构建；保留仅为可追溯）
+PATCH/luci-app-daed/   LuCI「服务 → daed」管理入口
 scripts/               构建辅助：apply-feed-patches.sh、check-firmware-artifacts.sh、
                        check-gemtek-profile-isolation.sh、set-build-version.sh 等
 target/linux/airoha/   设备树、内核与无线补丁、子目标内核片段（an7581）

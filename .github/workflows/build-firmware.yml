@@ -91,6 +91,12 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential clang gcc g++ binutils bzip2 gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip wget xsltproc zlib1g-dev file which perl sed make
 
+      - name: Check Go daed service and LuCI launcher
+        run: |
+          bash scripts/check-daed-init.sh
+          node scripts/check-daed-launcher.cjs
+          python3 -m py_compile scripts/fetch-kdae-payload.py scripts/verify-kdae-image.py
+
       - name: Install feeds
         run: |
           ./scripts/feeds update -a
@@ -116,14 +122,12 @@ jobs:
             rm -rf "package/new/$p"
             cp -rf "/tmp/luci-app-kixdns/$p" "package/new/$p"
           done
-          # daed（DaedNext Rust 内核）：整包替换上游 Go 版，载荷由下一步解包到 prebuilt-data/。
-          # 踩坑（2026-10-06 run#9）：同名包放在 package/new/ 会被 feed 遮蔽 —— build.log 里编的是
-          # feeds/packages/net/daed（上游 Go 版），本地副本从未参与构建，镜像里的 daed 因此是错的那个
-          # （manifest 显示 daed - 1.27.0-r1，而我们的 rust-daed 打包版本是 3.1.3）。
-          # 必须就地替换 feed 目录：feeds/packages/net/daed 与 package/feeds/packages/daed 软链都随之生效。
-          rm -rf feeds/packages/net/daed
+          # Replace the actual feed definitions, not a shadowed package/new copy.
+          rm -rf feeds/packages/net/daed feeds/luci/applications/luci-app-daed
           cp -rf PATCH/daed-pkg/daed feeds/packages/net/daed
-          ls -la package/new/ feeds/packages/net/daed/
+          cp -rf PATCH/luci-app-daed feeds/luci/applications/luci-app-daed
+          ./scripts/feeds update -i luci
+          ./scripts/feeds install -f -p luci luci-app-daed
           python3 - <<'PYEOF'
           import glob
           # daed 的内核前提：BTF + BPF + veth + clsact/tc。只写种子里的 CONFIG_KERNEL_* 在部分
@@ -140,6 +144,7 @@ jobs:
           CONFIG_BPF_JIT=y
           CONFIG_BPF_JIT_ALWAYS_ON=y
           CONFIG_VETH=y
+          CONFIG_NETKIT=y
           CONFIG_NET_SCH_INGRESS=y
           CONFIG_NET_CLS_ACT=y
           CONFIG_NET_CLS_BPF=y
@@ -187,38 +192,7 @@ jobs:
               os.chmod(path, 0o755)
               print('%-46s -> %s (%d bytes)' % (member, path, len(blob)))
           PYEOF
-          python3 - <<'PYEOF'
-          import gzip, io, os, shutil, tarfile, urllib.request
-          # daed：Quan-0505/rust-daed v3.1.3 的 aarch64 载荷。usr/bin/daed 是静态 AArch64
-          # （无解释器），与 AN7581 的 Cortex-A53 同核的 r2s 资产最贴近。
-          url = 'https://github.com/Quan-0505/rust-daed/releases/download/v3.1.3/rust-daed-r2s.apk'
-          print('fetching', url)
-          with urllib.request.urlopen(url, timeout=600) as resp:
-              raw = resp.read()
-          if raw[:2] != b'\x1f\x8b':
-              raise SystemExit('unexpected payload magic %s (want gzip/apk v2)' % raw[:4].hex())
-          tf = tarfile.open(fileobj=io.BytesIO(gzip.decompress(raw)), mode='r:')
-          # 与上一步同因：载荷必须解进 feed 里那棵 daed 源树
-          dst = os.path.join('feeds', 'packages', 'net', 'daed', 'prebuilt-data')
-          shutil.rmtree(dst, ignore_errors=True)
-          for m in tf.getmembers():
-              if m.name.startswith('usr/') or m.name.startswith('etc/'):
-                  p = os.path.join(dst, m.name)
-                  if m.isdir():
-                      os.makedirs(p, exist_ok=True)
-                  elif m.isfile():
-                      os.makedirs(os.path.dirname(p), exist_ok=True)
-                      with open(p, 'wb') as f:
-                          f.write(tf.extractfile(m).read())
-          web_dst = os.path.join(dst, 'usr', 'share', 'daed', 'web')
-          # 不再用 PATCH/daed-web 顶掉 web 目录：那份 UI 是本仓库第一次提交时的旧前端构建
-          # （576 个文件，index.html 指向的资源名与 v3.1.3 载荷完全不同），会把载荷自带的新 UI 整体遮蔽。
-          if not os.path.isfile(os.path.join(dst, 'etc', 'init.d', 'daed')):
-              raise SystemExit('daed payload is missing etc/init.d/daed')
-          print('payload daed: %d bytes' % os.path.getsize(os.path.join(dst, 'usr', 'bin', 'daed')))
-          print('payload files: %d (web %d)' % (sum(len(fs) for _, _, fs in os.walk(dst)),
-                                                sum(len(fs) for _, _, fs in os.walk(web_dst))))
-          PYEOF
+          python3 scripts/fetch-kdae-payload.py
 
       - name: Prepare footstrap theme (LuCI)
         run: |
@@ -410,7 +384,7 @@ jobs:
             *) echo "kernel_config 不是内核源码树里的 .config：$kernel_config" >&2; exit 1 ;;
           esac
           echo "kernel_config=$kernel_config"
-          for sym in CONFIG_DEBUG_INFO_BTF CONFIG_BPF_SYSCALL CONFIG_VETH CONFIG_NET_CLS_ACT CONFIG_NET_CLS_BPF CONFIG_NET_SCH_INGRESS; do
+          for sym in CONFIG_DEBUG_INFO_BTF CONFIG_BPF_SYSCALL CONFIG_VETH CONFIG_NET_CLS_ACT CONFIG_NET_CLS_BPF CONFIG_NET_SCH_INGRESS CONFIG_NETKIT; do
             grep -Eq "^${sym}=y$" "$kernel_config" || { echo "kernel is missing ${sym}=y" >&2; exit 1; }
             grep -E "^${sym}=y$" "$kernel_config"
           done
@@ -423,12 +397,19 @@ jobs:
             echo "$pat -> $n"
             [ "$n" -ge 1 ] || { echo "no built package matching $pat" >&2; exit 1; }
           done
-          echo '=== daed 源树必须是我们打包的 rust-daed（防再次被 feed 遮蔽）==='
+          echo '=== pinned Go KDAE feed definition ==='
           grep -q 'prebuilt-data' feeds/packages/net/daed/Makefile \
-            || { echo 'feeds/packages/net/daed 不是 rust-daed 打包（prebuilt-data 缺失）' >&2; exit 1; }
+            || { echo 'feeds/packages/net/daed is not the Go KDAE package（prebuilt-data 缺失）' >&2; exit 1; }
           grep -E '^PKG_(VERSION|RELEASE|SOURCE_VERSION):=' feeds/packages/net/daed/Makefile || true
-          grep -E '^daed[[:space:]]' bin/targets/airoha/an7581/*manifest | grep -q '3\.1\.3' \
-            || { echo '镜像 manifest 里的 daed 不是 3.1.3（很可能又编成 feed 的上游 Go 版）' >&2; exit 1; }
+          grep -E '^daed[[:space:]]' bin/targets/airoha/an7581/*manifest | grep -q '2\.2\.4-r1' \
+            || { echo 'manifest daed version differs from pinned Go KDAE 2.2.4-r1' >&2; exit 1; }
+          case '${{ inputs.config_seed }}' in
+            1710.config|1710-factory.config)
+              grep -Fqx 'CONFIG_PACKAGE_luci-app-daed=y' .config
+              grep -Eq '^luci-app-daed[[:space:]]+-[[:space:]]+2\.2\.4-r1$' bin/targets/airoha/an7581/*manifest
+              ;;
+          esac
+          python3 scripts/verify-kdae-image.py --root .
           echo '=== 载荷与镜像 ==='
           ls -lh feeds/packages/net/daed/prebuilt-data/usr/bin/daed package/new/kixdns/prebuilt/kixdns package/new/kixdns-stats/prebuilt/kixdns-stats-core
           ls -lh bin/targets/airoha/an7581/*.itb
@@ -507,6 +488,16 @@ jobs:
             n=$(find "$OUT/${f}" -maxdepth 1 -type f -name '*.apk' | wc -l)
             echo "  ${f} -> ${n} apk"
             total=$((total + n))
+          done
+          # These two definitions replace standard feed packages, so they must
+          # also be shipped in the recovery archive instead of being skipped.
+          mkdir -p "$OUT/kdae"
+          for pkg in daed luci-app-daed; do
+            grep -Fqx "CONFIG_PACKAGE_${pkg}=y" .config || continue
+            mapfile -t owned_pkgs < <(find bin/packages -type f -name "${pkg}-*.apk" | sort)
+            [ "${#owned_pkgs[@]}" -eq 1 ] || { echo "expected one built ${pkg} APK" >&2; exit 1; }
+            cp -f "${owned_pkgs[0]}" "$OUT/kdae/"
+            total=$((total + 1))
           done
           echo "custom feed packages collected: ${total}"
 
