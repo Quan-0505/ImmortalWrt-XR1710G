@@ -27,6 +27,10 @@ def prepare(root, archive=None):
             if len(hits) != 1:
                 raise ValueError(f'Expected one regular {name}, found {len(hits)}')
             payload[name] = archive_file.extractfile(hits[0]).read()
+    # Keep the public geodata archive, but pin the tested DNS handoff binary.
+    if spec.get('binary_url'):
+        with urllib.request.urlopen(spec['binary_url'], timeout=600) as response:
+            payload['usr/bin/daed'] = response.read()
     binary = payload['usr/bin/daed']
     if hashlib.sha256(binary).hexdigest() != spec['binary_sha256']:
         raise ValueError('Go binary SHA256 mismatch')
@@ -37,7 +41,7 @@ def prepare(root, archive=None):
     types = [struct.unpack_from('<I', binary, phoff + i * entry_size)[0] for i in range(count)]
     if 1 not in types or 3 in types:
         raise ValueError('Expected static ELF with PT_LOAD and no PT_INTERP')
-    if b'v2.2.4-kdae' not in binary:
+    if spec.get('binary_version', spec['tag']).encode() not in binary:
         raise ValueError('Go release version marker missing')
     dst = root / 'feeds/packages/net/daed/prebuilt-data'
     if dst.exists() and any(p.is_file() for p in dst.rglob('*')):
@@ -47,7 +51,7 @@ def prepare(root, archive=None):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         p.chmod(0o755 if name == 'usr/bin/daed' else 0o644)
-    print('PASS: pinned archive and binary SHA256; static AArch64 ELF/PT_LOAD control; v2.2.4-kdae; only binary + public geodata extracted.')
+    print('PASS: pinned archive and binary SHA256; static AArch64 ELF/PT_LOAD control; version marker; only binary + public geodata extracted.')
 
 
 if __name__ == '__main__':

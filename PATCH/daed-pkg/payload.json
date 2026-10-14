@@ -3,5 +3,8 @@
   "tag": "v2.2.4-kdae",
   "asset": "daed-kdae-r2s-v2.apk",
   "archive_sha256": "76788c5b4f8c23ab7b46a70f34f96eb034ab93b91fda07ed71ad89b4cfd563d1",
-  "binary_sha256": "98da79be0828dc6015f20502943727e6fc6c8bfee681962ad6275274e6d4b0d8"
+  "binary_sha256": "0f1e5b8348c52b07b2de8852b5f4ac87621c918c6da9df261fc51c0e33496c23",
+  "binary_url": "https://github.com/Quan-0505/daed-kdae/releases/download/v2.2.4-kdae-dnsfix/daed-kdae-arm64-dnsfix",
+  "binary_version": "v2.2.4-kdae-dnsfix",
+  "source_commit": "ba1e98402460c165e3269d5458d16aa171daa9f4"
 }

@@ -1,9 +1,9 @@
-# Pinned Go daed-kdae v2.2.4, with the new console embedded in the binary.
+# Pinned Go daed-kdae v2.2.4 DNS reload hotfix, with the new console embedded in the binary.
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
 PKG_VERSION:=2.2.4
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_LICENSE:=AGPL-3.0-only
 PKG_MAINTAINER:=Quan-0505
 
