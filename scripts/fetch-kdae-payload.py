@@ -9,6 +9,21 @@ import tarfile
 import urllib.request
 
 
+def _members(archive_file):
+    """把 apk/ipk 统一成 {相对路径: 成员}。
+
+    两种打包格式都要支持：
+      * 旧 ipk 结构：外层 tar 里放 ./data.tar.gz，真正的文件在里层；
+      * 新 apk(v3) 结构：外层 tar 成员直接是 .PKGINFO / usr/bin/daed 等，没有 data.tar.gz。
+    """
+    top = {m.name.lstrip('./'): m for m in archive_file.getmembers() if m.isfile()}
+    inner = next((m for n, m in top.items() if n.endswith('data.tar.gz')), None)
+    if inner is None:
+        return archive_file, top
+    with tarfile.open(fileobj=io.BytesIO(archive_file.extractfile(inner).read()), mode='r:gz') as nested:
+        return nested, {m.name.lstrip('./'): m for m in nested.getmembers() if m.isfile()}
+
+
 def prepare(root, archive=None):
     spec = json.loads((root / 'PATCH/daed-pkg/payload.json').read_text())
     url = f"https://github.com/{spec['repository']}/releases/download/{spec['tag']}/{spec['asset']}"
@@ -20,13 +35,14 @@ def prepare(root, archive=None):
     if hashlib.sha256(raw).hexdigest() != spec['archive_sha256']:
         raise ValueError('Pinned public archive SHA256 mismatch')
     required = ('usr/bin/daed', 'usr/share/daed/geoip.dat', 'usr/share/daed/geosite.dat')
-    with tarfile.open(fileobj=io.BytesIO(raw), mode='r:gz') as archive_file:
+    with tarfile.open(fileobj=io.BytesIO(raw), mode='r:*') as archive_file:
+        handle, members = _members(archive_file)
         payload = {}
         for name in required:
-            hits = [m for m in archive_file.getmembers() if m.name == name and m.isfile()]
+            hits = [m for n, m in members.items() if n == name]
             if len(hits) != 1:
                 raise ValueError(f'Expected one regular {name}, found {len(hits)}')
-            payload[name] = archive_file.extractfile(hits[0]).read()
+            payload[name] = handle.extractfile(hits[0]).read()
     # Keep the public geodata archive, but pin the tested DNS handoff binary.
     if spec.get('binary_url'):
         with urllib.request.urlopen(spec['binary_url'], timeout=600) as response:
