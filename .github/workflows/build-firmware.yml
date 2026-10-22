@@ -318,8 +318,14 @@ jobs:
               fi
               ;;
             *)
-              echo "=== Rebuilding package/$failed with V=s ==="
-              make "package/$failed/compile" V=s -j1 2>&1 | tee build-verbose.log || true
+              # $failed 可能是 "package/feeds/…"、"target/linux/…" 或裸包名；
+              # 只有裸包名才需要补 package/ 前缀，否则会出现 package/package/… 这种假错误。
+              case "$failed" in
+                package/*|target/*) tgt="$failed" ;;
+                *) tgt="package/$failed" ;;
+              esac
+              echo "=== Rebuilding $tgt with V=s (failed=「$failed」) ==="
+              make "$tgt/compile" V=s -j1 2>&1 | tee build-verbose.log || true
               ;;
           esac
 
