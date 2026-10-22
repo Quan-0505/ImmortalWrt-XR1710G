@@ -46,6 +46,13 @@
 
 ## 最近变更（2026-10）
 
+### 2026-10-21：同步 naoki66 上游（226 个提交）
+
+- 合并 `naoki66/ImmortalWrt-for-Gemtek-brightspeed@master` 自 10-14 以来的 **226 个上游提交**；本仓库 43 个自有提交（lan2 万兆修复、去超频、daed / 自定义 feed、主题与 CI 修复）全部保留。
+- 改动大头在 `target/linux`（365 个文件）：realtek 以太网 81 条、kernel 通用补丁 16 条，另有 qualcommax / ramips / ipq806x / ath79 / mediatek / rockchip / bcm4908 等目标的同步。
+- `package/boot` 新增 `uboot-mediatek`、`tfa-layerscape`、`arm-trusted-firmware-microchipsw`；nftables / libnftnl 补丁按新版本刷新，automount 改用 ntfsplus。
+- 合并方式为无工作树的测试合并（`merge-tree`，无冲突），见分支 [sync/naoki66-20261021](https://github.com/Quan-0505/ImmortalWrt-XR1710G/tree/sync/naoki66-20261021) 与 [PR #1](https://github.com/Quan-0505/ImmortalWrt-XR1710G/pull/1)。**尚未进入 master**：需先在该分支跑一次 Build Firmware，绿色后再合并。
+
 ### 2026-10-12：Go KDAE 管理界面与 LuCI 服务入口
 
 - 用 [daed-kdae v2.2.4-kdae](https://github.com/Quan-0505/daed-kdae/releases/tag/v2.2.4-kdae) 的静态 AArch64 程序替换 Rust daed，包含新版首页、日志、每日 Geo 更新、订阅自动重载和群组编辑。
