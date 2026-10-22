@@ -100,6 +100,10 @@ jobs:
       - name: Install feeds
         run: |
           ./scripts/feeds update -a
+          # libffi moved from the rolling packages feed into core. Older core
+          # snapshots must carry its target and host recipe before feed install.
+          test -f package/libs/libffi/Makefile
+          grep -Fq '$(eval $(call HostBuild))' package/libs/libffi/Makefile
           ./scripts/feeds install -a
           bash scripts/fix-stale-golang-host.sh
 
