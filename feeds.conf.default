@@ -19,3 +19,4 @@ src-git openwrt_bandix https://github.com/timsaya/openwrt-bandix.git;main
 src-git luci_app_bandix https://github.com/timsaya/luci-app-bandix.git;main
 src-git helloworld https://github.com/fw876/helloworld.git;dev
 src-git --directory=luci-app-pushbot pushbot https://github.com/naoki66/luci-app-pushbot.git
+src-git --root=deploy/openwrt ac_agent https://github.com/naoki66/OpenWrt_AC-Controller.git
