@@ -44,7 +44,15 @@
 - **新增目录**：[`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)
   （主题中文翻译）。旧版 `PATCH/daed-web` 覆盖层已移除，界面直接来自经过 SHA256 校验的 Go 二进制。
 
-## 最近变更（2026-10）
+## 最近变更（2026-11）
+
+### 2026-11-11：同步 naoki66 上游（11-02 → 11-09）
+
+- 从 `naoki66/ImmortalWrt-for-Gemtek-brightspeed@master` 移植 23 个与 XR1710G 相关的提交到 [sync/naoki66-20261111](https://github.com/Quan-0505/ImmortalWrt-XR1710G/tree/sync/naoki66-20261111)：airoha PCS 自适应与 rxlock 恢复补丁、kernel 6.18.60 offload 补丁刷新、NPU 默认与 PPE 流统计、移除 AN7581 PLL 直接调频、PON 恢复与 MSK 名称修正、wifi-scripts 多射频发射功率、mt76 beacon protection、构建侧 libffi 预置与 SmartDNS 失败传播。
+- 两仓库历史在 2016 年即分叉（直接 merge 会产生 2700+ 冲突），因此按提交逐个 cherry-pick；其他机型（XG2010G / 040 / 2010）专属改动与上游 OpenWrt 主线同步未纳入。
+- 补齐 daed / honk 需要的 eBPF 前置 kmod：`kmod-veth`、`kmod-nft-queue`、`kmod-xdp-sockets-diag`（`CONFIG_KERNEL_DEBUG_INFO_BTF` 与 `CONFIG_KERNEL_XDP_SOCKETS` 此前已开启）。
+- 上游的 `README.md` 与 `build-firmware.yml` 在本仓库是自研版本，未用上游覆盖。
+- 构建：[Build Firmware #49](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/runs/42975639994)（`1710.config`，release_type=release）。
 
 ### 2026-10-21：同步 naoki66 上游（226 个提交）
 
