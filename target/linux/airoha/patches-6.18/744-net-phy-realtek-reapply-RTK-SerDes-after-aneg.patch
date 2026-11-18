@@ -102,7 +102,7 @@ Assisted-by: Codex:GPT-5.6-sol
  	priv->phydev = phydev;
  	phydev->priv = priv;
  
-@@ -3425,11 +3430,17 @@
+@@ -3425,11 +3430,23 @@
  
  static int rtl826x_config_aneg(struct phy_device *phydev)
  {
@@ -116,11 +116,17 @@ Assisted-by: Codex:GPT-5.6-sol
 +		priv->rtk_serdes_state = RTL826X_RTK_SERDES_PULSE;
 +		priv->rtk_serdes_pulse_count = 0;
 +		priv->rtk_serdes_carrier_polls = 0;
++		/* phylink re-enters this callback on netdev open. Restore
++		 * the tuned host-SerDes values after the PCS was latched.
++		 */
++		ret = rtl826x_phy_patch_rtk_serdes(phydev);
++		if (ret < 0)
++			return ret;
 +	}
  	if (phydev->autoneg == AUTONEG_DISABLE)
  		return genphy_c45_pma_setup_forced(phydev);
  
-@@ -3459,8 +3470,33 @@
+@@ -3459,8 +3476,33 @@
  	return genphy_c45_check_and_restart_aneg(phydev, changed);
  }
  
@@ -154,7 +160,7 @@ Assisted-by: Codex:GPT-5.6-sol
  	int status;
  	int ret;
  
-@@ -3491,7 +3527,96 @@
+@@ -3491,7 +3533,96 @@
  			return ret;
  	}
  
