@@ -53,7 +53,7 @@ Signed-off-by: Chris Scott <gilroyscott1970@gmail.com>
  static int airoha_npu_probe(struct platform_device *pdev)
  {
  	struct device *dev = &pdev->dev;
-@@ -800,6 +805,19 @@ static int airoha_npu_probe(struct platf
+@@ -800,5 +805,18 @@ static int airoha_npu_probe(struct platf
  	if (err)
  		return err;
  
