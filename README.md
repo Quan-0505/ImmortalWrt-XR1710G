@@ -97,7 +97,7 @@
 
 ## 📦 固件下载
 
-[20261118-136fcd37](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261118-136fcd37) 发布了两种闪存布局的 `.itb`、软件包清单（`.manifest`）和 `sha256sums`。
+[20261118-136fcd37](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261118-136fcd37) 提供两种闪存布局的 `.itb` 固件。
 
 | 当前设备的闪存布局 | 下载 |
 | --- | --- |
