@@ -22,9 +22,9 @@
 
 
 面向 **Gemtek / Brightspeed XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND / Wi-Fi 7 MT7996AV）
-的 ImmortalWrt 25.12 固件，由 GitHub Actions 构建与发布。
+的 ImmortalWrt 25.12 固件。支持 GitHub Actions 和本地构建，固件在 GitHub Releases 发布。
 
-- **预装两个插件**：`kixdns`（含统计与 LuCI 应用）与 `daed`（Go KDAE v2.2.4，新管理界面内嵌）；
+- **预装两个插件**：`kixdns`（含统计与 LuCI 应用）与 `daed`（Go KDAE v2.2.6-kdae，管理界面内嵌）；
 - **默认管理地址 `192.168.2.1`**（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）；
 - **补齐 daed 的 eBPF 内核前提**（BTF / BPF / veth / clsact / Netkit），并裁掉用不到的第三方插件；
 - **两套 XR1710G 布局**：`1710.config` 构建 UBI 镜像，`1710-factory.config` 构建原厂分区镜像。两套镜像不能互刷。
@@ -34,7 +34,7 @@
 <a id="diff"></a>
 ## 🧭 本仓库做了什么
 
-- **预装插件**：`kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`（Go KDAE 2.2.4，新管理界面内嵌）；
+- **预装插件**：`kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`（Go KDAE v2.2.6-kdae，管理界面内嵌）；
   其余第三方插件一律关闭。
 - **默认管理地址**：`192.168.2.1`（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）。
 - **内核**：开启 `DEBUG_INFO_BTF`、`BPF`、`BPF_SYSCALL`、`BPF_JIT(_ALWAYS_ON)`、`VETH`、
@@ -46,20 +46,27 @@
 
 ## 最近变更（2026-11）
 
+### 2026-11-18 · 同步上游并发布双布局固件
+
+- 参考 [naoki66 上游 `9a70b257`](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed/commit/9a70b25731dc64822dcb24cf9a7dbe7a84ed1ba1)，在 11 月 11 日的同步分支上移植 XR1710G 相关修复。本次固件使用 Linux 6.18.55。
+- 为 Airoha NPU 预留 16 MiB DMA 一致性内存，修复 MT7996 接收环和复位后的恢复流程，并更新 PCIe PHY 校准和 RTL8261 万兆链路的 SerDes 恢复逻辑。
+- 修整内核补丁顺序和 PPE 计数兼容逻辑。DAWN 使用新版原生 6 GHz 支持，兼容旧的 `802_11a_6g` 配置段。两种布局均启用 `kmod-veth`、`kmod-nft-queue` 和 `kmod-xdp-sockets-diag`。
+- UBI 和原厂分区镜像均由本地构建机从 `136fcd37` 编译，通过 FIT 结构、设备配置、KixDNS / daed / footstrap 集成及 SHA-256 校验。实机启动待验证。 [20261118-136fcd37 Release](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261118-136fcd37)
+
 ### 2026-11-11：同步 naoki66 上游（11-02 → 11-09）
 
 - 从 `naoki66/ImmortalWrt-for-Gemtek-brightspeed@master` 移植 23 个与 XR1710G 相关的提交到 [sync/naoki66-20261111](https://github.com/Quan-0505/ImmortalWrt-XR1710G/tree/sync/naoki66-20261111)：airoha PCS 自适应与 rxlock 恢复补丁、kernel 6.18.60 offload 补丁刷新、NPU 默认与 PPE 流统计、移除 AN7581 PLL 直接调频、PON 恢复与 MSK 名称修正、wifi-scripts 多射频发射功率、mt76 beacon protection、构建侧 libffi 预置与 SmartDNS 失败传播。
 - 两仓库历史在 2016 年即分叉（直接 merge 会产生 2700+ 冲突），因此按提交逐个 cherry-pick；其他机型（XG2010G / 040 / 2010）专属改动与上游 OpenWrt 主线同步未纳入。
 - 补齐 daed / honk 需要的 eBPF 前置 kmod：`kmod-veth`、`kmod-nft-queue`、`kmod-xdp-sockets-diag`（`CONFIG_KERNEL_DEBUG_INFO_BTF` 与 `CONFIG_KERNEL_XDP_SOCKETS` 此前已开启）。
 - 上游的 `README.md` 与 `build-firmware.yml` 在本仓库是自研版本，未用上游覆盖。
-- 构建：[Build Firmware #49](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/runs/42975639994)（`1710.config`，release_type=release）。
+- 当时的 [Build Firmware #49](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/runs/42975639994) 构建失败。该分支的提交已纳入 11 月 18 日发布。
 
 ### 2026-10-21：同步 naoki66 上游（226 个提交）
 
 - 合并 `naoki66/ImmortalWrt-for-Gemtek-brightspeed@master` 自 10-14 以来的 **226 个上游提交**；本仓库 43 个自有提交（lan2 万兆修复、去超频、daed / 自定义 feed、主题与 CI 修复）全部保留。
 - 改动大头在 `target/linux`（365 个文件）：realtek 以太网 81 条、kernel 通用补丁 16 条，另有 qualcommax / ramips / ipq806x / ath79 / mediatek / rockchip / bcm4908 等目标的同步。
 - `package/boot` 新增 `uboot-mediatek`、`tfa-layerscape`、`arm-trusted-firmware-microchipsw`；nftables / libnftnl 补丁按新版本刷新，automount 改用 ntfsplus。
-- 合并方式为无工作树的测试合并（`merge-tree`，无冲突），见分支 [sync/naoki66-20261021](https://github.com/Quan-0505/ImmortalWrt-XR1710G/tree/sync/naoki66-20261021) 与 [PR #1](https://github.com/Quan-0505/ImmortalWrt-XR1710G/pull/1)。**尚未进入 master**：需先在该分支跑一次 Build Firmware，绿色后再合并。
+- 合并方式为无工作树的测试合并（`merge-tree`，无冲突），见分支 [sync/naoki66-20261021](https://github.com/Quan-0505/ImmortalWrt-XR1710G/tree/sync/naoki66-20261021) 与 [PR #1](https://github.com/Quan-0505/ImmortalWrt-XR1710G/pull/1)。该合并已进入 `master`。
 
 ### 2026-10-12：Go KDAE 管理界面与 LuCI 服务入口
 
@@ -90,10 +97,14 @@
 
 ## 📦 固件下载
 
-最新构建在 [Releases](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)：每次 CI 成功后附上
-`*.itb` 镜像；构建配置与镜像 sha256 见同次 Actions 运行的 Artifacts。
-CI 会分别构建**两种闪存布局**，按当前布局选对应文件（两种布局**不能互刷**），刷写细节见
-[🚀 快速开始](#-快速开始)。
+[20261118-136fcd37](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261118-136fcd37) 发布了两种闪存布局的 `.itb`、软件包清单（`.manifest`）和 `sha256sums`。
+
+| 当前设备的闪存布局 | 下载 |
+| --- | --- |
+| 原厂 U-Boot 分区 | [原厂分区 sysupgrade 镜像](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261118-136fcd37/immortalwrt-naoki66-xr1710g-20261118-136fcd37-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb) |
+| 已安装 OpenWrt U-Boot 的 UBI 布局 | [UBI sysupgrade 镜像](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261118-136fcd37/immortalwrt-naoki66-xr1710g-20261118-136fcd37-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb) |
+
+**两种布局不能互刷。** 选择与当前设备布局匹配的镜像，刷写细节见 [🚀 快速开始](#-快速开始)。[所有历史版本](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)
 
 ---
 
