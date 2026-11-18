@@ -1,40 +1,35 @@
 From: liujixings <liujixings@outlook.com>
-Subject: [PATCH] net: airoha: report unsupported PPE flow stats instead of zero
+Subject: [PATCH] net: airoha: report unavailable PPE flow counters
 
-The packets/bytes columns of /sys/kernel/debug/ppe/{entries,summary} are
-only filled while the NPU has mapped its flow stats window. When the
-firmware does not implement PPE_FUNC_SET_WAIT_FLOW_STATS_SETUP (the
-EN7581 MT7996 firmware 0.1111 answers with an error) airoha_ppe_offload_setup()
-logs "PPE flow stats unavailable", npu->stats stays NULL and
-airoha_ppe_foe_entry_get_stats() returns without reading anything.
-
-Both debugfs files then print the untouched zeroed structure, so every
-bound flow claims 0 packets and 0 bytes. That reads like an idle PPE table
-and hides the real state: the counters are not implemented, so they cannot
-be used to check whether a flow is accelerated at all.
-
-Report the state explicitly. Add a flow_stats line to the summary, print
-"n/a" for the counters while the stats window is missing, and call the NPU
-state "unsupported" instead of "unavailable" in the info file, since the
-firmware simply has no support for the mailbox command.
+Show n/a for entry counters when the NPU has no mapped flow-stats
+window. Report the window status through the existing PPE config file.
 
 Signed-off-by: liujixings <liujixings@outlook.com>
 Signed-off-by: naoki66 <naoki66@qq.com>
 ---
---- a/drivers/net/ethernet/airoha/airoha_npu.c
-+++ b/drivers/net/ethernet/airoha/airoha_npu.c
-@@ -741,7 +741,7 @@ static int airoha_npu_debugfs_info(struct seq_file *m, void *data)
- 	seq_printf(m, "mailbox_timeouts: %llu\n",
- 		   (u64)atomic64_read(&npu->mbox_timeouts));
- 	seq_printf(m, "ppe_stats: %s\n",
--		   npu->stats ? "mapped" : "unavailable");
-+		   npu->stats ? "mapped" : "unsupported");
- 
- 	for (i = 0; i < ARRAY_SIZE(npu->cores); i++) {
- 		u32 val[3];
 --- a/drivers/net/ethernet/airoha/airoha_ppe_debugfs.c
 +++ b/drivers/net/ethernet/airoha/airoha_ppe_debugfs.c
-@@ -167,11 +167,14 @@ static int airoha_ppe_debugfs_foe_show(struct seq_file *m, void *private,
+@@ -33,6 +33,19 @@
+ 	}
+ 	if (dest_port)
+ 		seq_printf(m, ":%d", *dest_port);
++}
++
++static bool airoha_ppe_flow_stats_available(struct airoha_ppe *ppe)
++{
++	struct airoha_npu *npu;
++	bool available;
++
++	rcu_read_lock();
++	npu = rcu_dereference(ppe->eth->npu);
++	available = npu && npu->stats;
++	rcu_read_unlock();
++
++	return available;
+ }
+ 
+ static int airoha_ppe_debugfs_foe_show(struct seq_file *m, void *private,
+@@ -164,11 +177,14 @@
  		*((__be32 *)h_source) = cpu_to_be32(l2->src_mac_hi);
  
  		seq_printf(m, " eth=%pM->%pM etype=%04x data=%08x"
@@ -53,59 +48,12 @@ Signed-off-by: naoki66 <naoki66@qq.com>
  	}
  
  	return 0;
-@@ -225,6 +228,23 @@ static int airoha_ppe_debugfs_config_show(struct seq_file *m, void *private)
- }
- DEFINE_SHOW_ATTRIBUTE(airoha_ppe_debugfs_config);
- 
-+/* The per-entry counters live in a DMA region the NPU fills while it
-+ * forwards a flow. Without a mapped stats window nothing ever updates
-+ * them, so every read returns zero: report that instead of a fake 0.
-+ */
-+static bool airoha_ppe_flow_stats_available(struct airoha_ppe *ppe)
-+{
-+	struct airoha_npu *npu;
-+	bool available;
-+
-+	rcu_read_lock();
-+	npu = rcu_dereference(ppe->eth->npu);
-+	available = npu && npu->stats;
-+	rcu_read_unlock();
-+
-+	return available;
-+}
-+
- static int airoha_ppe_debugfs_summary_show(struct seq_file *m, void *private)
- {
- 	static const char *const ppe_type_str[] = {
-@@ -256,11 +276,16 @@ static int airoha_ppe_debugfs_summary_show(struct seq_file *m, void *private)
- 	u32 entry_bound[ARRAY_SIZE(ppe_type_str)] = {};
- 	struct airoha_ppe *ppe = m->private;
- 	struct airoha_eth *eth = ppe->eth;
-+	bool hw_stats;
- 	u32 total, i;
- 
--	/* Hardware counters only exist when the flow stats region is
--	 * enabled; without it every packets/bytes value stays zero.
-+	/* Hardware counters only exist while the NPU stats window is mapped;
-+	 * without it every packets/bytes value stays zero.
+@@ -197,6 +213,8 @@
  	 */
-+	hw_stats = airoha_ppe_flow_stats_available(ppe);
+ 	seq_printf(m, "npu_attached: %u\n",
+ 		   !!rcu_access_pointer(eth->npu));
 +	seq_printf(m, "flow_stats: %s\n",
-+		   hw_stats ? "hardware" : "unsupported by firmware");
-+
- 	total = airoha_ppe_get_total_num_entries(ppe);
- 	for (i = 0; i < total; i++) {
- 		struct airoha_foe_stats64 stats = {};
-@@ -294,6 +319,12 @@ static int airoha_ppe_debugfs_summary_show(struct seq_file *m, void *private)
- 	for (i = 0; i < ARRAY_SIZE(ppe_type_str); i++) {
- 		if (!ppe_type_str[i])
- 			continue;
-+		if (!hw_stats) {
-+			seq_printf(m, "%-9s %5u %5u n/a n/a\n",
-+				   ppe_type_str[i], entry_total[i],
-+				   entry_bound[i]);
-+			continue;
-+		}
- 		seq_printf(m, "%-9s %5u %5u %llu %llu\n", ppe_type_str[i],
- 			   entry_total[i], entry_bound[i],
- 			   entry_packets[i], entry_bytes[i]);
++		   airoha_ppe_flow_stats_available(ppe) ? "hardware" : "unavailable");
+ 	seq_printf(m, "gdm2_fwd_cfg: %08x\n",
+ 		   airoha_fe_rr(eth, REG_GDM_FWD_CFG(AIROHA_GDM2_IDX)));
+ 	seq_printf(m, "fe_wan_port: %08x\n",
