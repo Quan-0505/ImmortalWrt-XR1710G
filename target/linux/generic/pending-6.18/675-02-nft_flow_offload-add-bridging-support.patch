@@ -141,14 +141,15 @@ diff --git a/net/netfilter/nf_flow_table_path.c b/net/netfilter/nf_flow_table_pa
  			if (is_zero_ether_addr(info->h_source))
  				memcpy(info->h_source, path->dev->dev_addr, ETH_ALEN);
  
-@@ -147,10 +211,8 @@
+@@ -147,11 +211,8 @@
  				info->num_encaps++;
  				break;
  			case DEV_PATH_BR_VLAN_UNTAG:
--				if (WARN_ON_ONCE(info->num_encaps-- == 0)) {
+-				if (info->num_encaps == 0) {
 -					info->indev = NULL;
 -					break;
 -				}
+-				info->num_encaps--;
 +				if (info->num_encaps > 0)
 +					info->num_encaps--;
  				break;
