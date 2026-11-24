@@ -1,9 +1,9 @@
-# Pinned Go daed-kdae v2.2.4 DNS reload hotfix, with the new console embedded in the binary.
+# Pinned Rust daed v3.2.2
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=daed
-PKG_VERSION:=2.2.4
-PKG_RELEASE:=2
+PKG_VERSION:=3.2.2
+PKG_RELEASE:=1
 PKG_LICENSE:=AGPL-3.0-only
 PKG_MAINTAINER:=Quan-0505
 
@@ -15,14 +15,13 @@ RSTRIP:=:
 define Package/daed
   SECTION:=net
   CATEGORY:=Network
-  TITLE:=daed Go KDAE network console
-  URL:=https://github.com/Quan-0505/daed-kdae
+  TITLE:=daed Rust DAED network console
+  URL:=https://github.com/Quan-0505/rust-daed
   DEPENDS:=+tc +ip-full
 endef
 
 define Package/daed/description
-  Static Go dae-wing/kdae daemon with embedded console, live logs,
-  scheduled geodata updates and group editors. Requires BTF/TC eBPF.
+  Rust native daed with DaeNext data plane and local Web console.
 endef
 
 define Package/daed/conffiles
