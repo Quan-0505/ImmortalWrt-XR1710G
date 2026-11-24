@@ -13,7 +13,7 @@ start_service() {
         sleep 1
         wait=$((wait + 1))
     done
-    install -d -m 0700 /etc/daed-rust
+    mkdir -p /etc/daed-rust && chmod 700 /etc/daed-rust || return 1
     mkdir -p /tmp/log/daed
     procd_open_instance
     procd_set_param command /usr/bin/daed run -c /etc/daed-rust/ --state /etc/daed-rust/daed.db
