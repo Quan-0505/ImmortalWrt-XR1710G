@@ -2,7 +2,7 @@
 
 # ImmortalWrt for Gemtek / Brightspeed XR1710G
 
-**ImmortalWrt 25.12 定制固件 · KixDNS + Go KDAE · footstrap 默认主题 · GitHub Actions 构建**
+**ImmortalWrt 25.12 定制固件 · Rust daed · Panabit AppDPI · Vantage 默认主题**
 
 [![Build](https://img.shields.io/github/actions/workflow/status/Quan-0505/ImmortalWrt-XR1710G/build-firmware.yml?branch=master&label=Build&style=flat-square)](https://github.com/Quan-0505/ImmortalWrt-XR1710G/actions/workflows/build-firmware.yml)
 [![Upstream](https://img.shields.io/badge/upstream-naoki66%2FImmortalWrt--for--Gemtek--brightspeed-blue?style=flat-square)](https://github.com/naoki66/ImmortalWrt-for-Gemtek-brightspeed)
@@ -22,9 +22,9 @@
 
 
 面向 **Gemtek / Brightspeed XR1710G**（Airoha AN7581GT，2 GB RAM / 512 MB NAND / Wi-Fi 7 MT7996AV）
-的 ImmortalWrt 25.12 固件。支持 GitHub Actions 和本地构建，固件在 GitHub Releases 发布。
+的 ImmortalWrt 25.12 固件。固件在 GitHub Releases 发布。
 
-- **预装两个插件**：`kixdns`（含统计与 LuCI 应用）与 `daed`（Go KDAE v2.2.6-kdae，管理界面内嵌）；
+- **本版预装**：Rust daed 3.2.2、Panabit AppDPI 和 Vantage 1.2.0，已移除 KIX DNS。
 - **默认管理地址 `192.168.2.1`**（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）；
 - **补齐 daed 的 eBPF 内核前提**（BTF / BPF / veth / clsact / Netkit），并裁掉用不到的第三方插件；
 - **两套 XR1710G 布局**：`1710.config` 构建 UBI 镜像，`1710-factory.config` 构建原厂分区镜像。两套镜像不能互刷。
@@ -34,17 +34,22 @@
 <a id="diff"></a>
 ## 🧭 本仓库做了什么
 
-- **预装插件**：`kixdns`（含 `kixdns-stats`、`luci-app-kixdns`）与 `daed`（Go KDAE v2.2.6-kdae，管理界面内嵌）；
-  其余第三方插件一律关闭。
+- **代理**：在 LuCI 的 **服务 → daed** 打开 Rust daed。升级前先备份订阅、节点和规则。
+- **应用识别**：在 **状态 → 应用识别** 查看 Panabit AppDPI 的设备与流量统计。
+- **默认主题**：Vantage 1.2.0。
 - **默认管理地址**：`192.168.2.1`（`CONFIG_TARGET_PREINIT_IP` / `PREINIT_BROADCAST`）。
 - **内核**：开启 `DEBUG_INFO_BTF`、`BPF`、`BPF_SYSCALL`、`BPF_JIT(_ALWAYS_ON)`、`VETH`、
   `NET_SCH_INGRESS`、`NET_CLS_ACT`、`NET_CLS_BPF`、`NETKIT`，并关闭 `DEBUG_INFO_REDUCED`，生成完整 BTF
   （daed 的 eBPF/CO-RE 依赖它）。
 - **设备范围**：XR1710G，支持 `gemtek_xr1710g-ubi`（UBI）与 `gemtek_xr1710g`（原厂分区）两种配置。
-- **新增目录**：[`PATCH/daed-pkg`](PATCH/daed-pkg)（daed 包定义）、[`PATCH/theme-footstrap-zh`](PATCH/theme-footstrap-zh)
-  （主题中文翻译）。旧版 `PATCH/daed-web` 覆盖层已移除，界面直接来自经过 SHA256 校验的 Go 二进制。
-
 ## 最近变更（2026-11）
+
+### 2026-11-24 · Linux 6.18.60、Rust daed、AppDPI 与 Vantage
+
+- 切换至 [Rust daed v3.2.2](https://github.com/Quan-0505/rust-daed/releases/tag/v3.2.2)，使用独立的 `/etc/daed-rust/` 数据目录。从 Go KDAE 升级时，先导出订阅、节点和规则，再导入 Rust daed。
+- 新增 [Panabit AppDPI](https://github.com/SuLingGG/panabit-appdpi)，修复 LuCI 读取设备与 IP 统计所需的权限。
+- 将 [Vantage](https://github.com/anothaDev/luci-theme-vantage) 设为默认主题，修复静态资源读取权限。
+- 双布局镜像与 SHA-256 见 [Release 20261124-f9e24008](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261124-f9e24008)。原厂分区基础版已实机验证，最终打包镜像已核验分区布局、软件包与修复内容。
 
 ### 2026-11-18 · 同步上游并发布双布局固件
 
@@ -97,12 +102,14 @@
 
 ## 📦 固件下载
 
-[20261118-136fcd37](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261118-136fcd37) 提供两种闪存布局的 `.itb` 固件。
+[20261124-f9e24008](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261124-f9e24008) 提供两种闪存布局的镜像。
 
 | 当前设备的闪存布局 | 下载 |
 | --- | --- |
-| 原厂 U-Boot 分区 | [原厂分区 sysupgrade 镜像](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261118-136fcd37/immortalwrt-naoki66-xr1710g-20261118-136fcd37-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb) |
-| 已安装 OpenWrt U-Boot 的 UBI 布局 | [UBI sysupgrade 镜像](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261118-136fcd37/immortalwrt-naoki66-xr1710g-20261118-136fcd37-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb) |
+| 原厂 U-Boot 分区 | [原厂分区 sysupgrade 镜像](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261124-f9e24008/immortalwrt-naoki66-xr1710g-20261124-f9e24008-airoha-an7581-gemtek_xr1710g-squashfs-sysupgrade.itb) |
+| 已安装 OpenWrt U-Boot 的 UBI 布局 | [UBI sysupgrade 镜像](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261124-f9e24008/immortalwrt-naoki66-xr1710g-20261124-f9e24008-airoha-an7581-gemtek_xr1710g-ubi-squashfs-sysupgrade.itb) |
+
+[自定义 APK 包](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/download/20261124-f9e24008/custom-feeds-aarch64_cortex-a53.tar.gz) · [SHA-256 校验值](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases/tag/20261124-f9e24008#构建与校验)
 
 **两种布局不能互刷。** 选择与当前设备布局匹配的镜像，刷写细节见 [🚀 快速开始](#-快速开始)。[所有历史版本](https://github.com/Quan-0505/ImmortalWrt-XR1710G/releases)
 
@@ -143,7 +150,9 @@
 ## 🔧 自行编译
 
 
-### GitHub Actions（推荐）
+20261124-f9e24008 由本地构建机产出，源码基线见 [构建标签](https://github.com/Quan-0505/ImmortalWrt-XR1710G/tree/20261124-f9e24008)。以下 GitHub Actions 与本地构建示例对应旧版 KIX DNS / Go KDAE / footstrap 组合。
+
+### GitHub Actions（旧版流程）
 
 1. Actions → **Build Firmware** → Run workflow；
 2. 参数：`config_seed = 1710.config`（UBI 布局，默认）或 `1710-factory.config`（原版 U-Boot 分区）、`release_type = none | prerelease | release`；
@@ -270,7 +279,7 @@ bash scripts/summarize-build-errors.sh build.log
 `default-settings-chn`。
 
 **代理与网络核心**：`xray-core`、`simple-obfs-client`、`chinadns-ng`、`geoview`、`dns2socks`、
-`microsocks`、`ipt2socks`。**插件**：`kixdns`(+stats)、`daed`（Go KDAE）。
+`microsocks`、`ipt2socks`。
 
 **未收录**：`lucky`、`smartdns`、`vlmcsd`、`msd_lite`、`udpxy`、`ddns-go`、`zerotier`、`rtp2httpd`、
 `wechatpush`、`timewol`（含各自的 LuCI 应用与中文语言包）。
